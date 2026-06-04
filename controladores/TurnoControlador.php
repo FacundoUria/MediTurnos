@@ -75,4 +75,9 @@ public function obtenerTurnosPaciente($id_paciente) {
 public function obtenerPaciente($id_paciente) {
     return $this->modelo->obtenerPacientePorId($id_paciente);
 }
+// Devuelve turnos por rango de fechas
+public function obtenerTurnosPorFecha($fecha_desde, $fecha_hasta) {
+    return $this->modelo->obtenerTurnosPorFecha($fecha_desde, $fecha_hasta);
+}
+
 }

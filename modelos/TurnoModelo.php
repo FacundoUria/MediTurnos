@@ -164,7 +164,29 @@ public function obtenerTurnosPorFecha($fecha_desde, $fecha_hasta) {
     $stmt->execute([':desde' => $fecha_desde, ':hasta' => $fecha_hasta]);
     return $stmt->fetchAll();
 }
+// Trae turnos por rango de fechas
+public function obtenerTurnosPorFecha($fecha_desde, $fecha_hasta) {
+    $sql = "SELECT 
+                t.id_turno,
+                t.fecha,
+                t.hora,
+                t.estado,
+                CONCAT(p.apellido, ', ', p.nombre) AS paciente,
+                CONCAT('Dr/a. ', m.apellido)       AS medico,
+                e.nombre                           AS especialidad,
+                c.numero                           AS consultorio
+            FROM Turno t
+            JOIN Paciente     p ON t.id_paciente    = p.id_paciente
+            JOIN Medico       m ON t.matricula       = m.matricula
+            JOIN Especialidad e ON t.id_especialidad = e.id_especialidad
+            JOIN Consultorio  c ON t.id_consultorio  = c.id_consultorio
+            WHERE t.fecha BETWEEN :desde AND :hasta
+            ORDER BY t.fecha ASC, t.hora ASC";
 
+    $stmt = $this->pdo->prepare($sql);
+    $stmt->execute([':desde' => $fecha_desde, ':hasta' => $fecha_hasta]);
+    return $stmt->fetchAll();
+}
 
 
 }
