@@ -3,8 +3,8 @@
  * vistas/panel/recepcionista/paciente.php
  * ---------------------------------------------------------------
  * Pantalla para buscar un paciente y ver todos sus turnos.
- * El recepcionista escribe el nombre o DNI, selecciona el paciente
- * y ve su historial completo de turnos.
+ * Permite cambiar el estado de cada turno directamente.
+ * El trigger LogTurno registra cada cambio automáticamente.
  * ---------------------------------------------------------------
  */
 session_start();
@@ -14,7 +14,22 @@ require_once __DIR__ . '/../../../controladores/TurnoControlador.php';
 $controlador = new TurnoControlador($pdo);
 $pacientes   = $controlador->obtenerDatosFormulario()['pacientes'];
 
-// Si se seleccionó un paciente, traemos sus datos y turnos
+$mensaje  = '';
+$tipo_msg = '';
+
+// Procesamos el cambio de estado si se envió
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_turno'], $_POST['estado_nuevo'])) {
+    try {
+        $controlador->cambiarEstado((int)$_POST['id_turno'], $_POST['estado_nuevo']);
+        $mensaje  = '✅ Estado actualizado correctamente.';
+        $tipo_msg = 'exito';
+    } catch (PDOException $e) {
+        $mensaje  = '❌ Error: ' . $e->getMessage();
+        $tipo_msg = 'error';
+    }
+}
+
+// Si se seleccionó un paciente traemos sus datos y turnos
 $paciente_seleccionado = null;
 $turnos_paciente       = [];
 
@@ -153,7 +168,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         box-shadow: var(--sombra);
         margin-bottom: 1.5rem;
         overflow: hidden;
-        max-width: 750px;
+        max-width: 900px;
     }
 
     .ficha-header {
@@ -170,7 +185,6 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     .ficha-datos {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 0;
         border-bottom: 1px solid var(--borde);
     }
 
@@ -207,7 +221,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         border-radius: var(--radio);
         box-shadow: var(--sombra);
         overflow: hidden;
-        max-width: 750px;
+        max-width: 900px;
     }
 
     .tabla-header {
@@ -262,6 +276,45 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     .estado.Cancelado  { background: #fff5f5; color: #991b1b; }
     .estado.Ausente    { background: #f5f3ff; color: #5b21b6; }
 
+    /* ── Botones de estado ── */
+    .botones-estado {
+        display: flex;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+    }
+
+    .btn-estado {
+        padding: 0.3rem 0.7rem;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        border: 1.5px solid var(--borde);
+        background: white;
+        cursor: pointer;
+        font-family: 'DM Sans', sans-serif;
+        transition: all 0.2s;
+    }
+
+    .btn-estado:hover { opacity: 0.85; }
+
+    .btn-estado.confirmar  { border-color: #93c5fd; color: #1d4ed8; }
+    .btn-estado.confirmar:hover  { background: #eff6ff; }
+
+    .btn-estado.realizado  { border-color: #86efac; color: #166534; }
+    .btn-estado.realizado:hover  { background: #f0fff4; }
+
+    .btn-estado.ausente    { border-color: #c4b5fd; color: #5b21b6; }
+    .btn-estado.ausente:hover    { background: #f5f3ff; }
+
+    .btn-estado.cancelar   { border-color: #fca5a5; color: #991b1b; }
+    .btn-estado.cancelar:hover   { background: #fff5f5; }
+
+    .btn-estado.deshabilitado {
+        opacity: 0.3;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+
     .sin-registros {
         text-align: center;
         padding: 3rem;
@@ -269,7 +322,6 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         font-style: italic;
     }
 
-    /* ── Estado vacío inicial ── */
     .estado-vacio {
         text-align: center;
         padding: 4rem 2rem;
@@ -304,7 +356,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         <a href="paciente.php" class="sidebar-link activo">
             <span class="icono">🔍</span> Buscar paciente
         </a>
-        
+
         <div class="sidebar-footer">
             <a href="/mediturnos/vistas/autenticacion/login.php" class="sidebar-link">
                 <span class="icono">🚪</span> Cerrar sesión
@@ -316,8 +368,14 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 
         <div class="encabezado-pagina">
             <h1>Buscar paciente</h1>
-            <p>Buscá un paciente para ver su historial de turnos</p>
+            <p>Buscá un paciente para ver y gestionar sus turnos</p>
         </div>
+
+        <?php if ($mensaje): ?>
+            <div class="alerta-<?= $tipo_msg ?>" style="margin-bottom:1.5rem;max-width:900px;">
+                <?= htmlspecialchars($mensaje) ?>
+            </div>
+        <?php endif; ?>
 
         <!-- Buscador -->
         <div class="buscador-card">
@@ -365,7 +423,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
                 </div>
             </div>
 
-            <!-- Tabla de turnos del paciente -->
+            <!-- Tabla de turnos con gestión de estados -->
             <div class="tabla-card">
                 <div class="tabla-header">
                     <h2>Historial de turnos</h2>
@@ -378,8 +436,8 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
                             <th>Hora</th>
                             <th>Médico</th>
                             <th>Especialidad</th>
-                            <th>Consultorio</th>
-                            <th>Estado</th>
+                            <th>Estado actual</th>
+                            <th>Cambiar estado</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -396,11 +454,56 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
                                 <td><?= date('H:i', strtotime($turno['hora'])) ?></td>
                                 <td><?= htmlspecialchars($turno['medico']) ?></td>
                                 <td><?= htmlspecialchars($turno['especialidad']) ?></td>
-                                <td><?= htmlspecialchars($turno['consultorio']) ?></td>
                                 <td>
                                     <span class="estado <?= $turno['estado'] ?>">
                                         <?= $turno['estado'] ?>
                                     </span>
+                                </td>
+                                <td>
+                                    <?php
+                                    // Si el turno ya está realizado o cancelado no se puede cambiar
+                                    $bloqueado = in_array($turno['estado'], ['Realizado', 'Cancelado']);
+                                    $id = $turno['id_turno'];
+                                    $estado = $turno['estado'];
+                                    ?>
+                                    <div class="botones-estado">
+                                        <!-- Confirmar -->
+                                        <form method="POST" action="?id_paciente=<?= $_GET['id_paciente'] ?>" style="display:inline">
+                                            <input type="hidden" name="id_turno" value="<?= $id ?>">
+                                            <input type="hidden" name="estado_nuevo" value="Confirmado">
+                                            <button type="submit"
+                                                class="btn-estado confirmar <?= ($bloqueado || $estado === 'Confirmado') ? 'deshabilitado' : '' ?>">
+                                                Confirmar
+                                            </button>
+                                        </form>
+                                        <!-- Realizado -->
+                                        <form method="POST" action="?id_paciente=<?= $_GET['id_paciente'] ?>" style="display:inline">
+                                            <input type="hidden" name="id_turno" value="<?= $id ?>">
+                                            <input type="hidden" name="estado_nuevo" value="Realizado">
+                                            <button type="submit"
+                                                class="btn-estado realizado <?= ($bloqueado || $estado === 'Realizado') ? 'deshabilitado' : '' ?>">
+                                                Realizado
+                                            </button>
+                                        </form>
+                                        <!-- Ausente -->
+                                        <form method="POST" action="?id_paciente=<?= $_GET['id_paciente'] ?>" style="display:inline">
+                                            <input type="hidden" name="id_turno" value="<?= $id ?>">
+                                            <input type="hidden" name="estado_nuevo" value="Ausente">
+                                            <button type="submit"
+                                                class="btn-estado ausente <?= ($bloqueado || $estado === 'Ausente') ? 'deshabilitado' : '' ?>">
+                                                Ausente
+                                            </button>
+                                        </form>
+                                        <!-- Cancelar -->
+                                        <form method="POST" action="?id_paciente=<?= $_GET['id_paciente'] ?>" style="display:inline">
+                                            <input type="hidden" name="id_turno" value="<?= $id ?>">
+                                            <input type="hidden" name="estado_nuevo" value="Cancelado">
+                                            <button type="submit"
+                                                class="btn-estado cancelar <?= ($bloqueado || $estado === 'Cancelado') ? 'deshabilitado' : '' ?>">
+                                                Cancelar
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
@@ -411,7 +514,6 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 
         <?php else: ?>
 
-            <!-- Estado inicial sin paciente seleccionado -->
             <div class="estado-vacio">
                 <div class="icono-grande">🔍</div>
                 <h3>Buscá un paciente para ver su historial</h3>

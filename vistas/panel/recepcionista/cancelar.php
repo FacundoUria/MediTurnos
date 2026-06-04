@@ -3,30 +3,42 @@
  * vistas/panel/recepcionista/cancelar.php
  * ---------------------------------------------------------------
  * Pantalla para buscar y cancelar un turno.
- * Por ahora los datos son de ejemplo (hardcodeados).
- * Cuando conectemos el backend van a venir de la DB.
+ * Los datos vienen de la DB a través del TurnoControlador.
+ * Al cancelar llama al SP CancelarTurno que también dispara
+ * el trigger LogTurno para registrar el cambio en el historial.
  * ---------------------------------------------------------------
  */
 session_start();
-require_once __DIR__ . '/../../../vistas/plantillas/header.php';
+require_once __DIR__ . '/../../../configuracion/conexion.php';
+require_once __DIR__ . '/../../../controladores/TurnoControlador.php';
 
-$turnos = [
-    ['id' => 1, 'hora' => '08:00', 'paciente' => 'García, Juan',     'medico' => 'Dr. Pérez',   'especialidad' => 'Cardiología',    'estado' => 'Confirmado'],
-    ['id' => 2, 'hora' => '08:30', 'paciente' => 'López, María',     'medico' => 'Dra. Romero', 'especialidad' => 'Pediatría',      'estado' => 'Pendiente'],
-    ['id' => 3, 'hora' => '09:00', 'paciente' => 'Martínez, Carlos', 'medico' => 'Dr. Gómez',   'especialidad' => 'Clínica Médica', 'estado' => 'Pendiente'],
-    ['id' => 4, 'hora' => '10:00', 'paciente' => 'Fernández, Laura', 'medico' => 'Dra. Torres', 'especialidad' => 'Dermatología',   'estado' => 'Confirmado'],
-    ['id' => 5, 'hora' => '10:30', 'paciente' => 'Rodríguez, Pablo', 'medico' => 'Dr. Gómez',   'especialidad' => 'Clínica Médica', 'estado' => 'Cancelado'],
-];
+$controlador = new TurnoControlador($pdo);
+
+$mensaje  = '';
+$tipo_msg = '';
+
+// Si se envió una cancelación la procesamos
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_turno'])) {
+    try {
+        $controlador->cancelarTurno((int)$_POST['id_turno']);
+        $mensaje  = '✅ Turno cancelado correctamente.';
+        $tipo_msg = 'exito';
+    } catch (PDOException $e) {
+        $mensaje  = '❌ ' . $e->getMessage();
+        $tipo_msg = 'error';
+    }
+}
+
+// Traemos los turnos activos de la DB
+$turnos = $controlador->obtenerTurnosActivos();
+
+require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 ?>
 
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    .layout {
-        display: flex;
-        min-height: 100vh;
-        width: 100%;
-    }
+    .layout { display: flex; min-height: 100vh; width: 100%; }
 
     .sidebar {
         width: 220px;
@@ -46,11 +58,7 @@ $turnos = [
         margin-bottom: 1.5rem;
     }
 
-    .sidebar-logo span {
-        font-family: 'DM Serif Display', serif;
-        color: #fff;
-        font-size: 1.3rem;
-    }
+    .sidebar-logo span { font-family: 'DM Serif Display', serif; color: #fff; font-size: 1.3rem; }
 
     .sidebar-seccion {
         font-size: 0.72rem;
@@ -74,7 +82,7 @@ $turnos = [
         transition: all 0.2s;
     }
 
-    .sidebar-link:hover { background: rgba(255,255,255,0.12); color: #fff; }
+    .sidebar-link:hover  { background: rgba(255,255,255,0.12); color: #fff; }
     .sidebar-link.activo { background: rgba(255,255,255,0.18); color: #fff; font-weight: 500; }
     .sidebar-link .icono { font-size: 1.1rem; width: 22px; text-align: center; }
 
@@ -125,27 +133,7 @@ $turnos = [
         gap: 0.4rem;
     }
 
-    .buscador-card label {
-        font-size: 0.88rem;
-        font-weight: 500;
-        color: var(--texto);
-    }
-
-    .boton-buscar {
-        padding: 0.85rem 1.4rem;
-        background: var(--primario);
-        color: white;
-        border: none;
-        border-radius: var(--radio);
-        font-family: 'DM Sans', sans-serif;
-        font-size: 0.92rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background 0.2s;
-        white-space: nowrap;
-    }
-
-    .boton-buscar:hover { background: var(--primario-osc); }
+    .buscador-card label { font-size: 0.88rem; font-weight: 500; color: var(--texto); }
 
     .tabla-card {
         background: var(--blanco);
@@ -158,9 +146,21 @@ $turnos = [
     .tabla-header {
         padding: 1.2rem 1.6rem;
         border-bottom: 1px solid var(--borde);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
     }
 
     .tabla-header h2 { font-size: 1rem; font-weight: 600; color: var(--texto); }
+
+    .badge-total {
+        background: var(--acento);
+        color: var(--primario);
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.80rem;
+        font-weight: 600;
+    }
 
     table { width: 100%; border-collapse: collapse; }
 
@@ -179,7 +179,6 @@ $turnos = [
     tbody tr { border-bottom: 1px solid var(--borde); transition: background 0.15s; }
     tbody tr:last-child { border-bottom: none; }
     tbody tr:hover { background: var(--acento); }
-
     tbody td { padding: 0.9rem 1.2rem; font-size: 0.90rem; color: var(--texto); }
 
     .hora { font-weight: 600; color: var(--primario); }
@@ -194,7 +193,6 @@ $turnos = [
 
     .estado.Pendiente  { background: #fefce8; color: #854d0e; }
     .estado.Confirmado { background: #eff6ff; color: #1d4ed8; }
-    .estado.Realizado  { background: #f0fff4; color: #166534; }
     .estado.Cancelado  { background: #fff5f5; color: #991b1b; }
 
     .btn-cancelar {
@@ -215,6 +213,13 @@ $turnos = [
         opacity: 0.35;
         cursor: not-allowed;
         pointer-events: none;
+    }
+
+    .sin-registros {
+        text-align: center;
+        padding: 3rem;
+        color: var(--texto-suave);
+        font-style: italic;
     }
 </style>
 
@@ -238,8 +243,8 @@ $turnos = [
             <span class="icono">❌</span> Cancelar turno
         </a>
         <a href="paciente.php" class="sidebar-link">
-    <span class="icono">🔍</span> Buscar paciente
-</a>
+            <span class="icono">🔍</span> Buscar paciente
+        </a>
 
         <div class="sidebar-footer">
             <a href="/mediturnos/vistas/autenticacion/login.php" class="sidebar-link">
@@ -255,10 +260,17 @@ $turnos = [
             <p>Buscá el turno que querés cancelar</p>
         </div>
 
+        <?php if ($mensaje): ?>
+            <div class="alerta-<?= $tipo_msg ?>" style="margin-bottom:1.5rem;">
+                <?= htmlspecialchars($mensaje) ?>
+            </div>
+        <?php endif; ?>
+
         <div class="aviso">
             ℹ️ Al cancelar un turno el registro <strong>no se elimina</strong> — queda guardado en el historial con estado <strong>Cancelado</strong>.
         </div>
 
+        <!-- Buscador -->
         <div class="buscador-card">
             <div class="grupo-campo">
                 <label for="buscar">Buscar por paciente o DNI</label>
@@ -270,16 +282,18 @@ $turnos = [
                     oninput="filtrarTabla(this.value)"
                 >
             </div>
-            <button class="boton-buscar">🔍 Buscar</button>
         </div>
 
+        <!-- Tabla -->
         <div class="tabla-card">
             <div class="tabla-header">
                 <h2>Turnos activos</h2>
+                <span class="badge-total" id="badge-total"><?= count($turnos) ?> turnos</span>
             </div>
             <table id="tabla-turnos">
                 <thead>
                     <tr>
+                        <th>Fecha</th>
                         <th>Hora</th>
                         <th>Paciente</th>
                         <th>Médico</th>
@@ -289,31 +303,44 @@ $turnos = [
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($turnos as $turno): ?>
-                    <tr>
-                        <td class="hora"><?= $turno['hora'] ?></td>
-                        <td><?= htmlspecialchars($turno['paciente']) ?></td>
-                        <td><?= htmlspecialchars($turno['medico']) ?></td>
-                        <td><?= htmlspecialchars($turno['especialidad']) ?></td>
-                        <td>
-                            <span class="estado <?= $turno['estado'] ?>">
-                                <?= $turno['estado'] ?>
-                            </span>
-                        </td>
-                        <td>
-                            <?php if ($turno['estado'] !== 'Cancelado' && $turno['estado'] !== 'Realizado'): ?>
-                                <button
-                                    class="btn-cancelar"
-                                    onclick="confirmarCancelacion(<?= $turno['id'] ?>, '<?= htmlspecialchars($turno['paciente']) ?>')"
-                                >
-                                    Cancelar
-                                </button>
-                            <?php else: ?>
-                                <button class="btn-cancelar deshabilitado">Cancelar</button>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
+                    <?php if (empty($turnos)): ?>
+                        <tr>
+                            <td colspan="7" class="sin-registros">
+                                No hay turnos activos
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($turnos as $turno): ?>
+                        <tr>
+                            <td><?= date('d/m/Y', strtotime($turno['fecha'])) ?></td>
+                            <td class="hora"><?= date('H:i', strtotime($turno['hora'])) ?></td>
+                            <td><?= htmlspecialchars($turno['paciente']) ?></td>
+                            <td><?= htmlspecialchars($turno['medico']) ?></td>
+                            <td><?= htmlspecialchars($turno['especialidad']) ?></td>
+                            <td>
+                                <span class="estado <?= $turno['estado'] ?>">
+                                    <?= $turno['estado'] ?>
+                                </span>
+                            </td>
+                            <td>
+                                <?php if ($turno['estado'] !== 'Cancelado'): ?>
+                                    <form method="POST" action="" style="display:inline;">
+                                        <input type="hidden" name="id_turno" value="<?= $turno['id_turno'] ?>">
+                                        <button
+                                            type="submit"
+                                            class="btn-cancelar"
+                                            onclick="return confirm('¿Cancelar el turno de <?= htmlspecialchars($turno['paciente']) ?>?\n\nEsta acción quedará registrada en el historial.')"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </form>
+                                <?php else: ?>
+                                    <button class="btn-cancelar deshabilitado">Cancelar</button>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>
@@ -325,15 +352,16 @@ $turnos = [
     function filtrarTabla(texto) {
         const filas = document.querySelectorAll('#tabla-turnos tbody tr');
         const busqueda = texto.toLowerCase();
-        filas.forEach(fila => {
-            fila.style.display = fila.textContent.toLowerCase().includes(busqueda) ? '' : 'none';
-        });
-    }
+        let visibles = 0;
 
-    function confirmarCancelacion(id, paciente) {
-        if (confirm(`¿Cancelar el turno de ${paciente}?\n\nEsta acción quedará registrada en el historial.`)) {
-            alert('Turno cancelado. (Conectar con backend)');
-        }
+        filas.forEach(fila => {
+            const contenido = fila.textContent.toLowerCase();
+            const visible = contenido.includes(busqueda);
+            fila.style.display = visible ? '' : 'none';
+            if (visible) visibles++;
+        });
+
+        document.getElementById('badge-total').textContent = visibles + ' turnos';
     }
 </script>
 

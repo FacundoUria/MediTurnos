@@ -27,10 +27,10 @@ class TurnoModelo {
                     e.nombre                           AS especialidad,
                     c.numero                           AS consultorio
                 FROM Turno t
-                JOIN Paciente     p ON t.id_paciente     = p.id_paciente
-                JOIN Medico       m ON t.matricula        = m.matricula
-                JOIN Especialidad e ON t.id_especialidad  = e.id_especialidad
-                JOIN Consultorio  c ON t.id_consultorio   = c.id_consultorio
+                JOIN Paciente     p ON t.id_paciente    = p.id_paciente
+                JOIN Medico       m ON t.matricula       = m.matricula
+                JOIN Especialidad e ON t.id_especialidad = e.id_especialidad
+                JOIN Consultorio  c ON t.id_consultorio  = c.id_consultorio
                 WHERE t.fecha = CURDATE()
                 ORDER BY t.hora ASC";
 
@@ -42,7 +42,7 @@ class TurnoModelo {
     // Cuenta los turnos de hoy por estado para los KPIs
     public function contarTurnosHoy() {
         $sql = "SELECT
-                    COUNT(*)                 AS total,
+                    COUNT(*)                  AS total,
                     SUM(estado = 'Pendiente') AS pendientes,
                     SUM(estado = 'Cancelado') AS cancelados
                 FROM Turno
@@ -51,6 +51,30 @@ class TurnoModelo {
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute();
         return $stmt->fetch();
+    }
+
+    // Trae turnos por rango de fechas
+    public function obtenerTurnosPorFecha($fecha_desde, $fecha_hasta) {
+        $sql = "SELECT 
+                    t.id_turno,
+                    t.fecha,
+                    t.hora,
+                    t.estado,
+                    CONCAT(p.apellido, ', ', p.nombre) AS paciente,
+                    CONCAT('Dr/a. ', m.apellido)       AS medico,
+                    e.nombre                           AS especialidad,
+                    c.numero                           AS consultorio
+                FROM Turno t
+                JOIN Paciente     p ON t.id_paciente    = p.id_paciente
+                JOIN Medico       m ON t.matricula       = m.matricula
+                JOIN Especialidad e ON t.id_especialidad = e.id_especialidad
+                JOIN Consultorio  c ON t.id_consultorio  = c.id_consultorio
+                WHERE t.fecha BETWEEN :desde AND :hasta
+                ORDER BY t.fecha ASC, t.hora ASC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([':desde' => $fecha_desde, ':hasta' => $fecha_hasta]);
+        return $stmt->fetchAll();
     }
 
     // Trae todos los pacientes para el select
@@ -106,87 +130,80 @@ class TurnoModelo {
         ]);
         return $this->pdo->lastInsertId();
     }
+
     // Trae todos los turnos de un paciente específico
-public function obtenerTurnosPorPaciente($id_paciente) {
+    public function obtenerTurnosPorPaciente($id_paciente) {
+        $sql = "SELECT
+                    t.id_turno,
+                    t.fecha,
+                    t.hora,
+                    t.estado,
+                    CONCAT('Dr/a. ', m.apellido) AS medico,
+                    e.nombre                     AS especialidad,
+                    c.numero                     AS consultorio
+                FROM Turno t
+                JOIN Medico       m ON t.matricula        = m.matricula
+                JOIN Especialidad e ON t.id_especialidad  = e.id_especialidad
+                JOIN Consultorio  c ON t.id_consultorio   = c.id_consultorio
+                WHERE t.id_paciente = :id_paciente
+                ORDER BY t.fecha DESC, t.hora DESC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([':id_paciente' => $id_paciente]);
+        return $stmt->fetchAll();
+    }
+
+    // Trae los datos de un paciente por su id
+    public function obtenerPacientePorId($id_paciente) {
+        $stmt = $this->pdo->prepare(
+            "SELECT id_paciente, nombre, apellido, dni, telefono, email
+             FROM Paciente
+             WHERE id_paciente = :id"
+        );
+        $stmt->execute([':id' => $id_paciente]);
+        return $stmt->fetch();
+    }
+
+    // Trae los turnos activos (no realizados) para cancelar
+public function obtenerTurnosActivos() {
     $sql = "SELECT
                 t.id_turno,
                 t.fecha,
                 t.hora,
                 t.estado,
-                CONCAT('Dr/a. ', m.apellido) AS medico,
-                e.nombre                     AS especialidad,
-                c.numero                     AS consultorio
+                CONCAT(p.apellido, ', ', p.nombre) AS paciente,
+                p.dni,
+                CONCAT('Dr/a. ', m.apellido)       AS medico,
+                e.nombre                           AS especialidad
             FROM Turno t
-            JOIN Medico       m ON t.matricula        = m.matricula
-            JOIN Especialidad e ON t.id_especialidad  = e.id_especialidad
-            JOIN Consultorio  c ON t.id_consultorio   = c.id_consultorio
-            WHERE t.id_paciente = :id_paciente
-            ORDER BY t.fecha DESC, t.hora DESC";
+            JOIN Paciente     p ON t.id_paciente    = p.id_paciente
+            JOIN Medico       m ON t.matricula       = m.matricula
+            JOIN Especialidad e ON t.id_especialidad = e.id_especialidad
+            WHERE t.estado NOT IN ('Realizado')
+            AND   t.fecha >= CURDATE()
+            ORDER BY t.fecha ASC, t.hora ASC";
 
     $stmt = $this->pdo->prepare($sql);
-    $stmt->execute([':id_paciente' => $id_paciente]);
+    $stmt->execute();
     return $stmt->fetchAll();
 }
 
-// Trae los datos de un paciente por su id
-public function obtenerPacientePorId($id_paciente) {
+// Cancela un turno llamando al SP CancelarTurno
+public function cancelarTurno($id_turno) {
+    $stmt = $this->pdo->prepare("CALL CancelarTurno(:id)");
+    $stmt->execute([':id' => $id_turno]);
+}
+
+// Cambia el estado de un turno
+// El trigger LogTurno registra el cambio automáticamente
+public function cambiarEstadoTurno($id_turno, $estado_nuevo) {
     $stmt = $this->pdo->prepare(
-        "SELECT p.id_paciente, p.nombre, p.apellido, p.dni, p.telefono, p.email
-         FROM Paciente p
-         WHERE p.id_paciente = :id"
+        "UPDATE Turno SET estado = :estado WHERE id_turno = :id"
     );
-    $stmt->execute([':id' => $id_paciente]);
-    return $stmt->fetch();
-}
-
-
-
-// Trae turnos por rango de fechas
-public function obtenerTurnosPorFecha($fecha_desde, $fecha_hasta) {
-    $sql = "SELECT 
-                t.id_turno,
-                t.fecha,
-                t.hora,
-                t.estado,
-                CONCAT(p.apellido, ', ', p.nombre) AS paciente,
-                CONCAT('Dr/a. ', m.apellido)       AS medico,
-                e.nombre                           AS especialidad,
-                c.numero                           AS consultorio
-            FROM Turno t
-            JOIN Paciente     p ON t.id_paciente    = p.id_paciente
-            JOIN Medico       m ON t.matricula       = m.matricula
-            JOIN Especialidad e ON t.id_especialidad = e.id_especialidad
-            JOIN Consultorio  c ON t.id_consultorio  = c.id_consultorio
-            WHERE t.fecha BETWEEN :desde AND :hasta
-            ORDER BY t.fecha ASC, t.hora ASC";
-
-    $stmt = $this->pdo->prepare($sql);
-    $stmt->execute([':desde' => $fecha_desde, ':hasta' => $fecha_hasta]);
-    return $stmt->fetchAll();
-}
-// Trae turnos por rango de fechas
-public function obtenerTurnosPorFecha($fecha_desde, $fecha_hasta) {
-    $sql = "SELECT 
-                t.id_turno,
-                t.fecha,
-                t.hora,
-                t.estado,
-                CONCAT(p.apellido, ', ', p.nombre) AS paciente,
-                CONCAT('Dr/a. ', m.apellido)       AS medico,
-                e.nombre                           AS especialidad,
-                c.numero                           AS consultorio
-            FROM Turno t
-            JOIN Paciente     p ON t.id_paciente    = p.id_paciente
-            JOIN Medico       m ON t.matricula       = m.matricula
-            JOIN Especialidad e ON t.id_especialidad = e.id_especialidad
-            JOIN Consultorio  c ON t.id_consultorio  = c.id_consultorio
-            WHERE t.fecha BETWEEN :desde AND :hasta
-            ORDER BY t.fecha ASC, t.hora ASC";
-
-    $stmt = $this->pdo->prepare($sql);
-    $stmt->execute([':desde' => $fecha_desde, ':hasta' => $fecha_hasta]);
-    return $stmt->fetchAll();
-}
-
+    $stmt->execute([
+        ':estado' => $estado_nuevo,
+        ':id'     => $id_turno,
+    ]);
+}   
 
 }

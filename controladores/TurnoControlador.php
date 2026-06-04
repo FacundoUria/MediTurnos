@@ -80,4 +80,19 @@ public function obtenerTurnosPorFecha($fecha_desde, $fecha_hasta) {
     return $this->modelo->obtenerTurnosPorFecha($fecha_desde, $fecha_hasta);
 }
 
+// Trae los turnos activos para la pantalla de cancelar
+public function obtenerTurnosActivos() {
+    return $this->modelo->obtenerTurnosActivos();
+}
+
+// Cancela un turno llamando al SP
+public function cancelarTurno($id_turno) {
+    $this->modelo->cancelarTurno($id_turno);
+}
+
+// Cambia el estado de un turno
+public function cambiarEstado($id_turno, $estado_nuevo) {
+    $this->modelo->cambiarEstadoTurno($id_turno, $estado_nuevo);
+}
+
 }
