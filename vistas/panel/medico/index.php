@@ -1,26 +1,30 @@
 <?php
 /*
- * vistas/panel/recepcionista/index.php
+ * vistas/panel/medico/index.php
  * ---------------------------------------------------------------
- * Panel principal del recepcionista.
- * Muestra KPIs del día y agenda filtrable por fecha o mes completo.
+ * Panel del médico — muestra su agenda personal.
+ * Solo lectura — no puede modificar nada.
+ * Filtra los turnos por la matrícula guardada en la sesión.
  * ---------------------------------------------------------------
  */
 session_start();
+
+// Verificamos que esté logueado y sea médico
+if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'Medico') {
+    header('Location: /mediturnos/vistas/autenticacion/login.php');
+    exit;
+}
+
 require_once __DIR__ . '/../../../configuracion/conexion.php';
-require_once __DIR__ . '/../../../controladores/TurnoControlador.php';
 
-$controlador = new TurnoControlador($pdo);
+// Traemos los turnos del médico logueado
+$matricula = $_SESSION['matricula'];
 
-// Determinamos el rango de fechas según el filtro elegido
 $filtro      = $_GET['filtro']      ?? 'hoy';
-$fecha_desde = $_GET['fecha_desde'] ?? date('Y-m-d');
-$fecha_hasta = $_GET['fecha_hasta'] ?? date('Y-m-d');
+$fecha_desde = date('Y-m-d');
+$fecha_hasta = date('Y-m-d');
 
-if ($filtro === 'hoy') {
-    $fecha_desde = date('Y-m-d');
-    $fecha_hasta = date('Y-m-d');
-} elseif ($filtro === 'mes') {
+if ($filtro === 'mes') {
     $fecha_desde = date('Y-m-01');
     $fecha_hasta = date('Y-m-t');
 } elseif ($filtro === 'personalizado') {
@@ -28,13 +32,51 @@ if ($filtro === 'hoy') {
     $fecha_hasta = $_GET['fecha_hasta'] ?? date('Y-m-d');
 }
 
-// Traemos los turnos y KPIs
-$turnos = $controlador->obtenerTurnosPorFecha($fecha_desde, $fecha_hasta);
-$kpis   = $controlador->obtenerKpis();
+// Traemos los turnos del médico
+$sql = "SELECT
+            t.id_turno,
+            t.fecha,
+            t.hora,
+            t.estado,
+            CONCAT(p.apellido, ', ', p.nombre) AS paciente,
+            p.dni,
+            p.telefono,
+            e.nombre AS especialidad,
+            c.numero AS consultorio
+        FROM Turno t
+        JOIN Paciente     p ON t.id_paciente    = p.id_paciente
+        JOIN Especialidad e ON t.id_especialidad = e.id_especialidad
+        JOIN Consultorio  c ON t.id_consultorio  = c.id_consultorio
+        WHERE t.matricula = :matricula
+        AND   t.fecha BETWEEN :desde AND :hasta
+        ORDER BY t.fecha ASC, t.hora ASC";
 
-$turnos_hoy        = $kpis['total']      ?? 0;
-$turnos_pendientes = $kpis['pendientes'] ?? 0;
-$turnos_cancelados = $kpis['cancelados'] ?? 0;
+$stmt = $pdo->prepare($sql);
+$stmt->execute([
+    ':matricula' => $matricula,
+    ':desde'     => $fecha_desde,
+    ':hasta'     => $fecha_hasta,
+]);
+$turnos = $stmt->fetchAll();
+
+// KPIs del día
+$sql_kpi = "SELECT
+                COUNT(*)                  AS total,
+                SUM(estado = 'Pendiente') AS pendientes,
+                SUM(estado = 'Confirmado') AS confirmados
+            FROM Turno
+            WHERE matricula = :matricula
+            AND   fecha = CURDATE()";
+
+$stmt_kpi = $pdo->prepare($sql_kpi);
+$stmt_kpi->execute([':matricula' => $matricula]);
+$kpis = $stmt_kpi->fetch();
+
+// Traemos el nombre del médico
+$sql_med = "SELECT nombre, apellido FROM Medico WHERE matricula = :matricula";
+$stmt_med = $pdo->prepare($sql_med);
+$stmt_med->execute([':matricula' => $matricula]);
+$medico = $stmt_med->fetch();
 
 require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 ?>
@@ -59,10 +101,20 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         align-items: center;
         gap: 0.7rem;
         padding: 0.5rem 0.8rem;
-        margin-bottom: 1.5rem;
+        margin-bottom: 1rem;
     }
 
     .sidebar-logo span { font-family: 'DM Serif Display', serif; color: #fff; font-size: 1.3rem; }
+
+    .sidebar-medico {
+        background: rgba(255,255,255,0.1);
+        border-radius: 10px;
+        padding: 0.8rem;
+        margin-bottom: 1rem;
+    }
+
+    .sidebar-medico .nombre { color: white; font-size: 0.90rem; font-weight: 600; }
+    .sidebar-medico .rol    { color: rgba(255,255,255,0.65); font-size: 0.78rem; margin-top: 0.2rem; }
 
     .sidebar-seccion {
         font-size: 0.72rem;
@@ -108,7 +160,6 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     .encabezado-pagina h1 { font-size: 1.5rem; font-weight: 600; color: var(--texto); }
     .encabezado-pagina p  { color: var(--texto-suave); font-size: 0.92rem; margin-top: 0.2rem; }
 
-    /* ── KPIs ── */
     .kpis {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -139,12 +190,11 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 
     .kpi-icono.azul  { background: #e8f4fd; }
     .kpi-icono.verde { background: #f0fff4; }
-    .kpi-icono.rojo  { background: #fff5f5; }
+    .kpi-icono.amarillo { background: #fefce8; }
 
     .kpi-numero { font-size: 1.8rem; font-weight: 600; color: var(--texto); line-height: 1; }
     .kpi-label  { font-size: 0.82rem; color: var(--texto-suave); margin-top: 0.2rem; }
 
-    /* ── Filtro de fechas ── */
     .filtro-card {
         background: var(--blanco);
         border-radius: var(--radio);
@@ -157,10 +207,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         flex-wrap: wrap;
     }
 
-    .filtro-tabs {
-        display: flex;
-        gap: 0.4rem;
-    }
+    .filtro-tabs { display: flex; gap: 0.4rem; }
 
     .filtro-btn {
         padding: 0.5rem 1rem;
@@ -179,18 +226,9 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     .filtro-btn:hover  { border-color: var(--primario); color: var(--primario); }
     .filtro-btn.activo { background: var(--primario); color: white; border-color: var(--primario); }
 
-    .filtro-separador {
-        width: 1px;
-        height: 32px;
-        background: var(--borde);
-    }
+    .filtro-separador { width: 1px; height: 32px; background: var(--borde); }
 
-    .filtro-personalizado {
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-    }
-
+    .filtro-personalizado { display: flex; align-items: center; gap: 0.6rem; }
     .filtro-personalizado input {
         padding: 0.5rem 0.8rem;
         border: 1.5px solid var(--borde);
@@ -201,13 +239,8 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         outline: none;
         transition: border 0.2s;
     }
-
     .filtro-personalizado input:focus { border-color: var(--primario); }
-
-    .filtro-personalizado span {
-        font-size: 0.85rem;
-        color: var(--texto-suave);
-    }
+    .filtro-personalizado span { font-size: 0.85rem; color: var(--texto-suave); }
 
     .btn-aplicar {
         padding: 0.5rem 1rem;
@@ -224,7 +257,6 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 
     .btn-aplicar:hover { background: var(--primario-osc); }
 
-    /* ── Tabla ── */
     .tabla-card {
         background: var(--blanco);
         border-radius: var(--radio);
@@ -243,24 +275,14 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 
     .tabla-header h2 { font-size: 1rem; font-weight: 600; color: var(--texto); }
 
-    .boton-reservar {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.6rem 1.1rem;
-        background: var(--primario);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-family: 'DM Sans', sans-serif;
-        font-size: 0.88rem;
-        font-weight: 500;
-        cursor: pointer;
-        text-decoration: none;
-        transition: background 0.2s;
+    .badge-total {
+        background: var(--acento);
+        color: var(--primario);
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.80rem;
+        font-weight: 600;
     }
-
-    .boton-reservar:hover { background: var(--primario-osc); }
 
     table { width: 100%; border-collapse: collapse; }
 
@@ -283,6 +305,9 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 
     .hora { font-weight: 600; color: var(--primario); }
 
+    .paciente-nombre { font-weight: 500; }
+    .paciente-dni    { font-size: 0.78rem; color: var(--texto-suave); margin-top: 0.1rem; }
+
     .estado {
         display: inline-block;
         padding: 0.25rem 0.75rem;
@@ -297,30 +322,12 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     .estado.Cancelado  { background: #fff5f5; color: #991b1b; }
     .estado.Ausente    { background: #f5f3ff; color: #5b21b6; }
 
-    .btn-accion {
-        padding: 0.35rem 0.8rem;
-        border-radius: 6px;
-        font-size: 0.80rem;
-        font-weight: 500;
-        border: 1.5px solid var(--borde);
-        background: white;
-        color: var(--texto);
-        cursor: pointer;
-        text-decoration: none;
-        transition: all 0.2s;
-    }
-
-    .btn-accion:hover { border-color: var(--primario); color: var(--primario); }
-
     .sin-registros {
         text-align: center;
         padding: 3rem;
         color: var(--texto-suave);
         font-style: italic;
     }
-
-    /* Etiqueta de fecha en tabla cuando es mes completo */
-    .fecha-col { color: var(--texto-suave); font-size: 0.85rem; }
 </style>
 
 <div class="layout">
@@ -331,27 +338,19 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
             <span>MediTurnos</span>
         </div>
 
+        <div class="sidebar-medico">
+            <div class="nombre">Dr/a. <?= htmlspecialchars($medico['apellido'] ?? '') ?></div>
+            <div class="rol">Médico — Matrícula <?= $matricula ?></div>
+        </div>
+
         <span class="sidebar-seccion">Menú</span>
 
         <a href="index.php" class="sidebar-link activo">
-            <span class="icono">📅</span> Agenda del día
-        </a>
-        <a href="reservar.php" class="sidebar-link">
-            <span class="icono">➕</span> Reservar turno
-        </a>
-       
-        <a href="paciente.php" class="sidebar-link">
-            <span class="icono">🔍</span> Buscar paciente
+            <span class="icono">📅</span> Mi agenda
         </a>
 
         <div class="sidebar-footer">
-    <a href="/mediturnos/vistas/autenticacion/logout.php" class="sidebar-link">
-        <span class="icono">🚪</span> Cerrar sesión
-    </a>
-</div>
-
-        <div class="sidebar-footer">
-            <a href="/mediturnos/vistas/autenticacion/login.php" class="sidebar-link">
+            <a href="/mediturnos/vistas/autenticacion/logout.php" class="sidebar-link">
                 <span class="icono">🚪</span> Cerrar sesión
             </a>
         </div>
@@ -360,119 +359,93 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     <main class="contenido">
 
         <div class="encabezado-pagina">
-            <h1>Agenda</h1>
+            <h1>Mi agenda</h1>
             <p><?= date('d/m/Y') ?></p>
         </div>
 
-        <!-- KPIs siempre muestran el día de hoy -->
         <div class="kpis">
             <div class="kpi">
                 <div class="kpi-icono azul">📅</div>
                 <div>
-                    <div class="kpi-numero"><?= $turnos_hoy ?></div>
+                    <div class="kpi-numero"><?= $kpis['total'] ?? 0 ?></div>
                     <div class="kpi-label">Turnos hoy</div>
                 </div>
             </div>
             <div class="kpi">
-                <div class="kpi-icono verde">⏳</div>
+                <div class="kpi-icono amarillo">⏳</div>
                 <div>
-                    <div class="kpi-numero"><?= $turnos_pendientes ?></div>
+                    <div class="kpi-numero"><?= $kpis['pendientes'] ?? 0 ?></div>
                     <div class="kpi-label">Pendientes hoy</div>
                 </div>
             </div>
             <div class="kpi">
-                <div class="kpi-icono rojo">❌</div>
+                <div class="kpi-icono verde">✅</div>
                 <div>
-                    <div class="kpi-numero"><?= $turnos_cancelados ?></div>
-                    <div class="kpi-label">Cancelados hoy</div>
+                    <div class="kpi-numero"><?= $kpis['confirmados'] ?? 0 ?></div>
+                    <div class="kpi-label">Confirmados hoy</div>
                 </div>
             </div>
         </div>
 
-        <!-- Filtro de fechas -->
         <div class="filtro-card">
             <div class="filtro-tabs">
-                <a href="?filtro=hoy"
-                   class="filtro-btn <?= $filtro === 'hoy' ? 'activo' : '' ?>">
-                    Hoy
-                </a>
-                <a href="?filtro=mes"
-                   class="filtro-btn <?= $filtro === 'mes' ? 'activo' : '' ?>">
-                    Este mes
-                </a>
+                <a href="?filtro=hoy" class="filtro-btn <?= $filtro === 'hoy' ? 'activo' : '' ?>">Hoy</a>
+                <a href="?filtro=mes" class="filtro-btn <?= $filtro === 'mes' ? 'activo' : '' ?>">Este mes</a>
             </div>
-
             <div class="filtro-separador"></div>
-
-            <!-- Rango personalizado -->
             <form method="GET" action="" class="filtro-personalizado">
                 <input type="hidden" name="filtro" value="personalizado">
                 <span>Desde</span>
-                <input type="date" name="fecha_desde"
-                       value="<?= $filtro === 'personalizado' ? $fecha_desde : date('Y-m-d') ?>">
+                <input type="date" name="fecha_desde" value="<?= $filtro === 'personalizado' ? $fecha_desde : date('Y-m-d') ?>">
                 <span>hasta</span>
-                <input type="date" name="fecha_hasta"
-                       value="<?= $filtro === 'personalizado' ? $fecha_hasta : date('Y-m-d') ?>">
+                <input type="date" name="fecha_hasta" value="<?= $filtro === 'personalizado' ? $fecha_hasta : date('Y-m-d') ?>">
                 <button type="submit" class="btn-aplicar">Aplicar</button>
             </form>
         </div>
 
-        <!-- Tabla de turnos -->
         <div class="tabla-card">
             <div class="tabla-header">
                 <h2>
-                    <?php if ($filtro === 'hoy'): ?>
-                        Turnos de hoy
-                    <?php elseif ($filtro === 'mes'): ?>
-                        Turnos de <?= date('F Y') ?>
-                    <?php else: ?>
-                        Turnos del <?= date('d/m/Y', strtotime($fecha_desde)) ?>
-                        al <?= date('d/m/Y', strtotime($fecha_hasta)) ?>
+                    <?php if ($filtro === 'hoy'): ?>Turnos de hoy
+                    <?php elseif ($filtro === 'mes'): ?>Turnos de <?= date('F Y') ?>
+                    <?php else: ?>Turnos del <?= date('d/m/Y', strtotime($fecha_desde)) ?> al <?= date('d/m/Y', strtotime($fecha_hasta)) ?>
                     <?php endif; ?>
                 </h2>
-                <a href="reservar.php" class="boton-reservar">＋ Nuevo turno</a>
+                <span class="badge-total"><?= count($turnos) ?> turnos</span>
             </div>
-
             <table>
                 <thead>
                     <tr>
-                        <?php if ($filtro !== 'hoy'): ?>
-                            <th>Fecha</th>
-                        <?php endif; ?>
+                        <?php if ($filtro !== 'hoy'): ?><th>Fecha</th><?php endif; ?>
                         <th>Hora</th>
                         <th>Paciente</th>
-                        <th>Médico</th>
                         <th>Especialidad</th>
+                        <th>Consultorio</th>
                         <th>Estado</th>
-                        <th>Acción</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($turnos)): ?>
                         <tr>
-                            <td colspan="<?= $filtro !== 'hoy' ? 7 : 6 ?>" class="sin-registros">
-                                No hay turnos para el período seleccionado
+                            <td colspan="<?= $filtro !== 'hoy' ? 6 : 5 ?>" class="sin-registros">
+                                No tenés turnos para el período seleccionado
                             </td>
                         </tr>
                     <?php else: ?>
-                        <?php foreach ($turnos as $turno): ?>
+                        <?php foreach ($turnos as $t): ?>
                         <tr>
                             <?php if ($filtro !== 'hoy'): ?>
-                                <td class="fecha-col"><?= date('d/m/Y', strtotime($turno['fecha'])) ?></td>
+                                <td><?= date('d/m/Y', strtotime($t['fecha'])) ?></td>
                             <?php endif; ?>
-                            <td class="hora"><?= date('H:i', strtotime($turno['hora'])) ?></td>
-                            <td><?= htmlspecialchars($turno['paciente']) ?></td>
-                            <td><?= htmlspecialchars($turno['medico']) ?></td>
-                            <td><?= htmlspecialchars($turno['especialidad']) ?></td>
+                            <td class="hora"><?= date('H:i', strtotime($t['hora'])) ?></td>
                             <td>
-                                <span class="estado <?= $turno['estado'] ?>">
-                                    <?= $turno['estado'] ?>
-                                </span>
+                                <div class="paciente-nombre"><?= htmlspecialchars($t['paciente']) ?></div>
+                                <div class="paciente-dni">DNI: <?= htmlspecialchars($t['dni']) ?></div>
                             </td>
+                            <td><?= htmlspecialchars($t['especialidad']) ?></td>
+                            <td>Consultorio <?= htmlspecialchars($t['consultorio']) ?></td>
                             <td>
-                                <a href="cancelar.php?id=<?= $turno['id_turno'] ?>" class="btn-accion">
-                                    Gestionar
-                                </a>
+                                <span class="estado <?= $t['estado'] ?>"><?= $t['estado'] ?></span>
                             </td>
                         </tr>
                         <?php endforeach; ?>

@@ -164,35 +164,9 @@ class TurnoModelo {
         return $stmt->fetch();
     }
 
-    // Trae los turnos activos (no realizados) para cancelar
-public function obtenerTurnosActivos() {
-    $sql = "SELECT
-                t.id_turno,
-                t.fecha,
-                t.hora,
-                t.estado,
-                CONCAT(p.apellido, ', ', p.nombre) AS paciente,
-                p.dni,
-                CONCAT('Dr/a. ', m.apellido)       AS medico,
-                e.nombre                           AS especialidad
-            FROM Turno t
-            JOIN Paciente     p ON t.id_paciente    = p.id_paciente
-            JOIN Medico       m ON t.matricula       = m.matricula
-            JOIN Especialidad e ON t.id_especialidad = e.id_especialidad
-            WHERE t.estado NOT IN ('Realizado')
-            AND   t.fecha >= CURDATE()
-            ORDER BY t.fecha ASC, t.hora ASC";
+    
 
-    $stmt = $this->pdo->prepare($sql);
-    $stmt->execute();
-    return $stmt->fetchAll();
-}
 
-// Cancela un turno llamando al SP CancelarTurno
-public function cancelarTurno($id_turno) {
-    $stmt = $this->pdo->prepare("CALL CancelarTurno(:id)");
-    $stmt->execute([':id' => $id_turno]);
-}
 
 // Cambia el estado de un turno
 // El trigger LogTurno registra el cambio automáticamente
