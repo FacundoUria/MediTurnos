@@ -350,6 +350,9 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         <a href="reservar.php" class="sidebar-link">
             <span class="icono">➕</span> Reservar turno
         </a>
+        <a href="suspender.php" class="sidebar-link">
+    <span class="icono">🚫</span> Suspender agenda
+</a>
         
         <a href="paciente.php" class="sidebar-link activo">
             <span class="icono">🔍</span> Buscar paciente
@@ -361,6 +364,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
             </a>
         </div>
     </aside>
+
 
     
 

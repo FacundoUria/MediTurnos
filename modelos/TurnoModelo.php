@@ -180,4 +180,80 @@ public function cambiarEstadoTurno($id_turno, $estado_nuevo) {
     ]);
 }   
 
+
+
+// Verifica si hay turnos pendientes para un médico en una fecha
+public function contarTurnosPendientes($matricula, $fecha) {
+    $stmt = $this->pdo->prepare(
+        "SELECT COUNT(*) AS total FROM Turno
+         WHERE matricula = :matricula
+         AND   fecha     = :fecha
+         AND   estado    = 'Pendiente'"
+    );
+    $stmt->execute([':matricula' => $matricula, ':fecha' => $fecha]);
+    return $stmt->fetch()['total'];
+}
+
+// Trae los turnos pendientes de un médico en una fecha
+public function obtenerTurnosPendientesPorFecha($matricula, $fecha) {
+    $stmt = $this->pdo->prepare(
+        "SELECT id_turno FROM Turno
+         WHERE matricula = :matricula
+         AND   fecha     = :fecha
+         AND   estado    = 'Pendiente'"
+    );
+    $stmt->execute([':matricula' => $matricula, ':fecha' => $fecha]);
+    return $stmt->fetchAll();
+}
+
+// Suspende la agenda — transacción ACID completa
+public function suspenderAgenda($matricula, $fecha) {
+
+    // Iniciamos la transacción — todo o nada
+    $this->pdo->beginTransaction();
+
+    try {
+        // PASO 1: Traemos los turnos pendientes para registrar el historial
+        $turnos = $this->obtenerTurnosPendientesPorFecha($matricula, $fecha);
+
+        // PASO 2: Cancelamos todos los turnos pendientes de ese día
+        $stmt = $this->pdo->prepare(
+            "UPDATE Turno SET estado = 'Cancelado'
+             WHERE matricula = :matricula
+             AND   fecha     = :fecha
+             AND   estado    = 'Pendiente'"
+        );
+        $stmt->execute([':matricula' => $matricula, ':fecha' => $fecha]);
+
+        // PASO 3: Insertamos un registro en Historial_Turno por cada turno
+        $stmt_hist = $this->pdo->prepare(
+            "INSERT INTO Historial_Turno
+                (id_turno, estado_anterior, estado_nuevo, fecha_cambio, observacion)
+             VALUES
+                (:id_turno, 'Pendiente', 'Cancelado', NOW(), 'Ausencia de profesional')"
+        );
+
+        foreach ($turnos as $turno) {
+            $stmt_hist->execute([':id_turno' => $turno['id_turno']]);
+        }
+
+        // PASO 4: Bloqueamos la agenda para esa fecha
+        $stmt_blq = $this->pdo->prepare(
+            "INSERT INTO Agenda_Bloqueada (matricula, fecha, motivo)
+             VALUES (:matricula, :fecha, 'Ausencia de profesional')"
+        );
+        $stmt_blq->execute([':matricula' => $matricula, ':fecha' => $fecha]);
+
+        // Todo ok — confirmamos los cambios
+        $this->pdo->commit();
+
+        return count($turnos);
+
+    } catch (Exception $e) {
+        // Algo falló — revertimos todo como si nada hubiera pasado
+        $this->pdo->rollBack();
+        throw $e;
+    }
+}
+
 }
