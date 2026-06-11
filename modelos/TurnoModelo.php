@@ -194,13 +194,16 @@ public function contarTurnosPendientes($matricula, $fecha) {
     return $stmt->fetch()['total'];
 }
 
-// Trae los turnos pendientes de un médico en una fecha
+// Trae los turnos pendientes de un médico en una fecha, con datos del paciente
 public function obtenerTurnosPendientesPorFecha($matricula, $fecha) {
     $stmt = $this->pdo->prepare(
-        "SELECT id_turno FROM Turno
-         WHERE matricula = :matricula
-         AND   fecha     = :fecha
-         AND   estado    = 'Pendiente'"
+        "SELECT t.id_turno, t.hora, p.nombre, p.apellido, p.dni
+         FROM Turno t
+         JOIN Paciente p ON t.id_paciente = p.id_paciente
+         WHERE t.matricula = :matricula
+         AND   t.fecha     = :fecha
+         AND   t.estado    = 'Pendiente'
+         ORDER BY t.hora ASC"
     );
     $stmt->execute([':matricula' => $matricula, ':fecha' => $fecha]);
     return $stmt->fetchAll();
@@ -247,13 +250,76 @@ public function suspenderAgenda($matricula, $fecha) {
         // Todo ok — confirmamos los cambios
         $this->pdo->commit();
 
-        return count($turnos);
+        return [
+            'count'  => count($turnos),
+            'turnos' => $turnos,
+        ];
 
     } catch (Exception $e) {
         // Algo falló — revertimos todo como si nada hubiera pasado
         $this->pdo->rollBack();
         throw $e;
     }
+}
+
+// Trae médicos por especialidad
+public function obtenerMedicosPorEspecialidad($id_especialidad) {
+    $stmt = $this->pdo->prepare(
+        "SELECT m.matricula, m.nombre, m.apellido
+         FROM Medico m
+         JOIN Medico_Especialidad me ON m.matricula = me.matricula
+         WHERE me.id_especialidad = :id
+         ORDER BY m.apellido ASC"
+    );
+    $stmt->execute([':id' => $id_especialidad]);
+    return $stmt->fetchAll();
+}
+
+// Trae los días que atiende un médico (opcionalmente filtrando por especialidad)
+public function obtenerDiasMedico($matricula, $id_especialidad = null) {
+    $sql = "SELECT DISTINCT dia_semana FROM Horario_Atencion
+            WHERE matricula = :matricula AND activo = 1";
+    $params = [':matricula' => $matricula];
+
+    if ($id_especialidad !== null) {
+        $sql .= " AND id_especialidad = :id_especialidad";
+        $params[':id_especialidad'] = $id_especialidad;
+    }
+
+    $sql .= " ORDER BY dia_semana ASC";
+
+    $stmt = $this->pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+// Trae los bloques de horario de un médico en un día específico (opcionalmente por especialidad)
+public function obtenerHorasMedico($matricula, $dia_semana, $id_especialidad = null) {
+    $sql = "SELECT hora_inicio, hora_fin, id_consultorio
+            FROM Horario_Atencion
+            WHERE matricula = :matricula
+            AND   dia_semana = :dia
+            AND   activo = 1";
+    $params = [':matricula' => $matricula, ':dia' => $dia_semana];
+
+    if ($id_especialidad !== null) {
+        $sql .= " AND id_especialidad = :id_especialidad";
+        $params[':id_especialidad'] = $id_especialidad;
+    }
+
+    $stmt = $this->pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+// Verifica si una fecha está bloqueada para un médico
+public function fechaBloqueada($matricula, $fecha) {
+    $stmt = $this->pdo->prepare(
+        "SELECT COUNT(*) AS total FROM Agenda_Bloqueada
+         WHERE matricula = :matricula AND fecha = :fecha"
+    );
+    $stmt->execute([':matricula' => $matricula, ':fecha' => $fecha]);
+    return $stmt->fetch()['total'] > 0;
 }
 
 }

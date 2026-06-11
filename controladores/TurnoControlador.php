@@ -87,6 +87,26 @@ class TurnoControlador {
         $this->modelo->cambiarEstadoTurno($id_turno, $estado_nuevo);
     }
 
+    // Trae los médicos que dictan una especialidad
+    public function obtenerMedicosPorEspecialidad($id_especialidad) {
+        return $this->modelo->obtenerMedicosPorEspecialidad($id_especialidad);
+    }
+
+    // Trae los días de la semana que atiende un médico
+    public function obtenerDiasMedico($matricula, $id_especialidad = null) {
+        return $this->modelo->obtenerDiasMedico($matricula, $id_especialidad);
+    }
+
+    // Trae los bloques de horario de un médico en un día específico
+    public function obtenerHorasMedico($matricula, $dia_semana, $id_especialidad = null) {
+        return $this->modelo->obtenerHorasMedico($matricula, $dia_semana, $id_especialidad);
+    }
+
+    // Verifica si una fecha está bloqueada para un médico
+    public function fechaBloqueada($matricula, $fecha) {
+        return $this->modelo->fechaBloqueada($matricula, $fecha);
+    }
+
     // Suspende la agenda de un médico en una fecha — transacción ACID
     public function suspenderAgenda($matricula, $fecha) {
 

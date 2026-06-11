@@ -414,15 +414,14 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
                     </div>
                     <div class="grupo-campo">
                         <label for="matricula">Médico</label>
-                        <select name="matricula" id="matricula" class="campo" required>
-                            <option value="">— Seleccioná —</option>
-                            <?php foreach ($datos['medicos'] as $m): ?>
-                                <option value="<?= $m['matricula'] ?>">
-                                    Dr/a. <?= htmlspecialchars($m['apellido'] . ', ' . $m['nombre']) ?>
-                                </option>
-                            <?php endforeach; ?>
+                        <select name="matricula" id="matricula" class="campo" required disabled>
+                            <option value="">— Elegí una especialidad primero —</option>
                         </select>
                     </div>
+                </div>
+
+                <div class="grupo-campo campo-completo" id="dias-atencion-wrapper" style="display:none; margin-top:0.8rem;">
+                    <small id="dias-atencion-texto" style="color: var(--texto-suave);"></small>
                 </div>
 
                 <hr class="separador">
@@ -431,32 +430,22 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
                 <div class="grilla-2">
                     <div class="grupo-campo">
                         <label for="fecha">Fecha</label>
-                        <input type="date" id="fecha" name="fecha" class="campo" required min="<?= date('Y-m-d') ?>">
+                        <input type="date" id="fecha" name="fecha" class="campo" required min="<?= date('Y-m-d') ?>" disabled>
                     </div>
                     <div class="grupo-campo">
                         <label for="hora">Hora</label>
-                        <select name="hora" id="hora" class="campo" required>
-                            <option value="">— Seleccioná —</option>
-                            <?php
-                            $horas = ['07:00','07:30','08:00','08:30','09:00','09:30','10:00','10:30',
-                                      '11:00','11:30','12:00','14:00','14:30','15:00','15:30','16:00','16:30','17:00'];
-                            foreach ($horas as $h): ?>
-                                <option value="<?= $h ?>"><?= $h ?></option>
-                            <?php endforeach; ?>
+                        <select name="hora" id="hora" class="campo" required disabled>
+                            <option value="">— Elegí una fecha primero —</option>
                         </select>
                     </div>
-                    <div class="grupo-campo campo-completo">
-                        <label for="id_consultorio">Consultorio</label>
-                        <select name="id_consultorio" id="id_consultorio" class="campo" required>
-                            <option value="">— Seleccioná —</option>
-                            <?php foreach ($datos['consultorios'] as $c): ?>
-                                <option value="<?= $c['id_consultorio'] ?>">
-                                    Consultorio <?= htmlspecialchars($c['numero']) ?> — <?= htmlspecialchars($c['piso']) ?> piso
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                    <div class="grupo-campo campo-completo" id="aviso-bloqueo" style="display:none;">
+                        <div class="alerta-error">
+                            <span id="aviso-bloqueo-texto"></span>
+                        </div>
                     </div>
                 </div>
+
+                <input type="hidden" name="id_consultorio" id="id_consultorio" value="">
 
                 <div class="acciones">
                     <a href="index.php" class="boton-secundario">← Volver</a>
@@ -543,6 +532,142 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         document.getElementById('panel-nuevo').classList.remove('visible');
         document.getElementById('panel-' + tipo).classList.add('visible');
     }
+</script>
+
+<script>
+    // ── Selects encadenados: especialidad → médico → fecha → hora/consultorio ──
+
+    const NOMBRES_DIAS = { 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado', 7: 'Domingo' };
+
+    const selectEspecialidad = document.getElementById('id_especialidad');
+    const selectMedico       = document.getElementById('matricula');
+    const inputFecha         = document.getElementById('fecha');
+    const selectHora         = document.getElementById('hora');
+    const inputConsultorio   = document.getElementById('id_consultorio');
+    const diasWrapper        = document.getElementById('dias-atencion-wrapper');
+    const diasTexto          = document.getElementById('dias-atencion-texto');
+    const avisoBloqueo       = document.getElementById('aviso-bloqueo');
+    const avisoBloqueoTexto  = document.getElementById('aviso-bloqueo-texto');
+
+    let diasPermitidos = [];
+
+    // Convierte el día de la semana de JS (0=Domingo..6=Sábado) al formato de la DB (1=Lunes..7=Domingo)
+    function diaSemanaDB(fecha) {
+        const dia = new Date(fecha + 'T00:00:00').getDay();
+        return dia === 0 ? 7 : dia;
+    }
+
+    function resetSelect(select, placeholder) {
+        select.innerHTML = `<option value="">${placeholder}</option>`;
+        select.disabled = true;
+    }
+
+    selectEspecialidad.addEventListener('change', async function() {
+        resetSelect(selectMedico, '— Elegí una especialidad primero —');
+        resetSelect(selectHora, '— Elegí una fecha primero —');
+        inputFecha.value = '';
+        inputFecha.disabled = true;
+        inputConsultorio.value = '';
+        diasWrapper.style.display = 'none';
+        avisoBloqueo.style.display = 'none';
+        diasPermitidos = [];
+
+        const idEspecialidad = this.value;
+        if (!idEspecialidad) return;
+
+        const respuesta = await fetch(`ajax/selects.php?accion=medicos_por_especialidad&id_especialidad=${idEspecialidad}`);
+        const datos     = await respuesta.json();
+
+        selectMedico.innerHTML = '<option value="">— Seleccioná —</option>';
+        datos.medicos.forEach(m => {
+            const opcion = document.createElement('option');
+            opcion.value = m.matricula;
+            opcion.textContent = `Dr/a. ${m.apellido}, ${m.nombre}`;
+            selectMedico.appendChild(opcion);
+        });
+        selectMedico.disabled = false;
+    });
+
+    selectMedico.addEventListener('change', async function() {
+        resetSelect(selectHora, '— Elegí una fecha primero —');
+        inputFecha.value = '';
+        inputConsultorio.value = '';
+        avisoBloqueo.style.display = 'none';
+        diasPermitidos = [];
+
+        const matricula = this.value;
+        if (!matricula) {
+            inputFecha.disabled = true;
+            diasWrapper.style.display = 'none';
+            return;
+        }
+
+        const idEspecialidad = selectEspecialidad.value;
+        const respuesta = await fetch(`ajax/selects.php?accion=dias_medico&matricula=${matricula}&id_especialidad=${idEspecialidad}`);
+        const datos     = await respuesta.json();
+
+        diasPermitidos = datos.dias;
+
+        if (diasPermitidos.length > 0) {
+            diasTexto.textContent = 'Atiende los días: ' + diasPermitidos.map(d => NOMBRES_DIAS[d]).join(', ');
+            diasWrapper.style.display = 'block';
+            inputFecha.disabled = false;
+        } else {
+            diasTexto.textContent = 'Este médico no tiene días de atención configurados.';
+            diasWrapper.style.display = 'block';
+            inputFecha.disabled = true;
+        }
+    });
+
+    inputFecha.addEventListener('change', async function() {
+        resetSelect(selectHora, '— Seleccioná —');
+        inputConsultorio.value = '';
+        avisoBloqueo.style.display = 'none';
+
+        const fecha = this.value;
+        if (!fecha) return;
+
+        const dia = diaSemanaDB(fecha);
+
+        if (!diasPermitidos.includes(dia)) {
+            avisoBloqueoTexto.textContent = `El médico no atiende los días ${NOMBRES_DIAS[dia]}. Elegí una fecha que coincida con sus días de atención.`;
+            avisoBloqueo.style.display = 'block';
+            this.value = '';
+            resetSelect(selectHora, '— Elegí una fecha primero —');
+            return;
+        }
+
+        const matricula       = selectMedico.value;
+        const idEspecialidad  = selectEspecialidad.value;
+        const respuesta = await fetch(`ajax/selects.php?accion=horas_medico&matricula=${matricula}&fecha=${fecha}&dia_semana=${dia}&id_especialidad=${idEspecialidad}`);
+        const datos     = await respuesta.json();
+
+        if (datos.bloqueada) {
+            avisoBloqueoTexto.textContent = datos.motivo;
+            avisoBloqueo.style.display = 'block';
+            this.value = '';
+            resetSelect(selectHora, '— Elegí una fecha primero —');
+            return;
+        }
+
+        if (datos.slots.length === 0) {
+            avisoBloqueoTexto.textContent = 'No hay horarios disponibles para esa fecha.';
+            avisoBloqueo.style.display = 'block';
+            resetSelect(selectHora, '— Elegí una fecha primero —');
+            return;
+        }
+
+        selectHora.innerHTML = '<option value="">— Seleccioná —</option>';
+        datos.slots.forEach(hora => {
+            const opcion = document.createElement('option');
+            opcion.value = hora;
+            opcion.textContent = hora;
+            selectHora.appendChild(opcion);
+        });
+        selectHora.disabled = false;
+
+        inputConsultorio.value = datos.id_consultorio ?? '';
+    });
 </script>
 
 <?php require_once __DIR__ . '/../../../vistas/plantillas/footer.php'; ?>

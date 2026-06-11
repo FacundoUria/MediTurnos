@@ -15,9 +15,10 @@ require_once __DIR__ . '/../../../controladores/TurnoControlador.php';
 $controlador = new TurnoControlador($pdo);
 $medicos     = $controlador->obtenerDatosFormulario()['medicos'];
 
-$mensaje      = '';
-$tipo_msg     = '';
-$turnos_afectados = 0;
+$mensaje           = '';
+$tipo_msg          = '';
+$turnos_afectados  = 0;
+$turnos_cancelados = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $matricula = $_POST['matricula'] ?? '';
@@ -28,7 +29,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tipo_msg = 'error';
     } else {
         try {
-            $turnos_afectados = $controlador->suspenderAgenda($matricula, $fecha);
+            $resultado         = $controlador->suspenderAgenda($matricula, $fecha);
+            $turnos_afectados  = $resultado['count'];
+            $turnos_cancelados = $resultado['turnos'];
             $mensaje  = "✅ Agenda suspendida correctamente. Se cancelaron {$turnos_afectados} turno(s) y se bloqueó la fecha.";
             $tipo_msg = 'exito';
         } catch (Exception $e) {
@@ -206,6 +209,39 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     .resultado-card h3 { font-size: 1rem; font-weight: 600; color: var(--texto); margin-bottom: 0.5rem; }
     .resultado-card p  { font-size: 0.90rem; color: var(--texto-suave); }
     .resultado-numero  { font-size: 2rem; font-weight: 700; color: #16a34a; margin: 0.5rem 0; }
+
+    /* ── Tabla de turnos a reasignar ── */
+    .reasignar-card {
+        background: var(--blanco);
+        border-radius: var(--radio);
+        box-shadow: var(--sombra);
+        padding: 1.6rem 2rem;
+        max-width: 700px;
+        margin-top: 1.5rem;
+    }
+
+    .reasignar-card h3 { font-size: 1rem; font-weight: 600; color: var(--texto); margin-bottom: 1rem; }
+
+    .tabla-reasignar { width: 100%; border-collapse: collapse; font-size: 0.90rem; }
+
+    .tabla-reasignar th,
+    .tabla-reasignar td {
+        text-align: left;
+        padding: 0.7rem 0.8rem;
+        border-bottom: 1px solid var(--borde);
+    }
+
+    .tabla-reasignar th {
+        color: var(--texto-suave);
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .tabla-reasignar tr:last-child td { border-bottom: none; }
+
+    .tabla-reasignar td.reasignar-aviso { color: var(--primario); font-weight: 500; }
 </style>
 
 <div class="layout">
@@ -313,6 +349,33 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
                 Todos los cambios fueron registrados en el historial.<br>
                 La fecha quedó bloqueada para nuevas reservas.
             </p>
+        </div>
+        <?php endif; ?>
+
+        <!-- Turnos cancelados que necesitan reasignación manual -->
+        <?php if ($tipo_msg === 'exito' && count($turnos_cancelados) > 0): ?>
+        <div class="reasignar-card">
+            <h3>Turnos a reasignar manualmente</h3>
+            <table class="tabla-reasignar">
+                <thead>
+                    <tr>
+                        <th>Hora</th>
+                        <th>Paciente</th>
+                        <th>DNI</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($turnos_cancelados as $t): ?>
+                        <tr>
+                            <td><?= htmlspecialchars(substr($t['hora'], 0, 5)) ?></td>
+                            <td><?= htmlspecialchars($t['apellido'] . ', ' . $t['nombre']) ?></td>
+                            <td><?= htmlspecialchars($t['dni']) ?></td>
+                            <td class="reasignar-aviso">Reasignar manualmente desde Buscar paciente</td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
         <?php endif; ?>
 
