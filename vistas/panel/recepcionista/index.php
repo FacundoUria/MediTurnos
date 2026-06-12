@@ -347,17 +347,18 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
             <span class="icono">🔍</span> Buscar paciente
         </a>
 
+        <a href="registrar_medico.php" class="sidebar-link">
+            <span class="icono">👨‍⚕️</span> Registrar médico
+        </a>
+        <a href="gestionar_medicos.php" class="sidebar-link">
+            <span class="icono">👨‍⚕️</span> Gestionar médicos
+        </a>
+
         <div class="sidebar-footer">
     <a href="/mediturnos/vistas/autenticacion/logout.php" class="sidebar-link">
         <span class="icono">🚪</span> Cerrar sesión
     </a>
 </div>
-
-        <div class="sidebar-footer">
-            <a href="/mediturnos/vistas/autenticacion/login.php" class="sidebar-link">
-                <span class="icono">🚪</span> Cerrar sesión
-            </a>
-        </div>
     </aside>
 
     <main class="contenido">

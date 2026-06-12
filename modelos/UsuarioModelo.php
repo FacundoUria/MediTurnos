@@ -34,4 +34,16 @@ class UsuarioModelo {
         $stmt->execute([':dni' => $dni]);
         return $stmt->fetch();
     }
+
+    // Busca un paciente por DNI — usado para el acceso sin contraseña
+    public function buscarPacientePorDni($dni) {
+        $stmt = $this->pdo->prepare(
+            "SELECT id_paciente, nombre, apellido, dni
+             FROM Paciente
+             WHERE dni = :dni
+             LIMIT 1"
+        );
+        $stmt->execute([':dni' => $dni]);
+        return $stmt->fetch();
+    }
 }

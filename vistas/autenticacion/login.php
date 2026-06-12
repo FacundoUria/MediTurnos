@@ -27,22 +27,45 @@ if (isset($_SESSION['rol'])) {
     }
 }
 
+$tab_activo = 'paciente';
+
 // Procesamos el formulario cuando se envía
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $dni      = trim($_POST['dni']      ?? '');
-    $password = trim($_POST['password'] ?? '');
+    $tipo = $_POST['tipo'] ?? 'paciente';
+    $controlador = new AuthControlador($pdo);
 
-    if (empty($dni) || empty($password)) {
-        $error = 'Completá todos los campos.';
-    } else {
-        $controlador = new AuthControlador($pdo);
-        $resultado   = $controlador->login($dni, $password);
+    if ($tipo === 'paciente') {
+        $tab_activo = 'paciente';
+        $dni = trim($_POST['dni'] ?? '');
 
-        if ($resultado['exito']) {
-            header("Location: " . $resultado['destino']);
-            exit;
+        if (empty($dni)) {
+            $error = 'Ingresá tu DNI.';
         } else {
-            $error = $resultado['mensaje'];
+            $resultado = $controlador->loginPaciente($dni);
+
+            if ($resultado['exito']) {
+                header("Location: " . $resultado['destino']);
+                exit;
+            } else {
+                $error = $resultado['mensaje'];
+            }
+        }
+    } else {
+        $tab_activo = 'staff';
+        $dni      = trim($_POST['dni']      ?? '');
+        $password = trim($_POST['password'] ?? '');
+
+        if (empty($dni) || empty($password)) {
+            $error = 'Completá todos los campos.';
+        } else {
+            $resultado = $controlador->login($dni, $password);
+
+            if ($resultado['exito']) {
+                header("Location: " . $resultado['destino']);
+                exit;
+            } else {
+                $error = $resultado['mensaje'];
+            }
         }
     }
 }
@@ -145,6 +168,36 @@ require_once __DIR__ . '/../../vistas/plantillas/header.php';
 
     .pie-formulario { margin-top: 1.5rem; text-align: center; color: var(--texto-suave); font-size: 0.82rem; }
 
+    /* ── Tabs de login ── */
+    .tabs-login {
+        display: flex;
+        gap: 0;
+        margin-bottom: 1.5rem;
+        background: var(--fondo);
+        border-radius: var(--radio);
+        padding: 0.4rem;
+    }
+
+    .tab-login {
+        flex: 1;
+        padding: 0.7rem 1rem;
+        border-radius: 8px;
+        border: none;
+        background: transparent;
+        font-family: 'DM Sans', sans-serif;
+        font-size: 0.92rem;
+        font-weight: 500;
+        color: var(--texto-suave);
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: center;
+    }
+
+    .tab-login.activo { background: var(--primario); color: #fff; }
+
+    .panel-login { display: none; }
+    .panel-login.visible { display: block; }
+
     @media (max-width: 640px) {
         .panel-marca { display: none; }
         .panel-formulario { width: 100%; padding: 2rem 1.5rem; }
@@ -167,44 +220,87 @@ require_once __DIR__ . '/../../vistas/plantillas/header.php';
 
         <div class="panel-formulario">
             <h2>Bienvenido</h2>
-            <p class="subtitulo">Ingresá con tu DNI y contraseña para continuar</p>
+            <p class="subtitulo">Elegí cómo querés ingresar</p>
+
+            <div class="tabs-login">
+                <button type="button" class="tab-login <?= $tab_activo === 'paciente' ? 'activo' : '' ?>" onclick="cambiarTabLogin('paciente', this)">
+                    Soy paciente
+                </button>
+                <button type="button" class="tab-login <?= $tab_activo === 'staff' ? 'activo' : '' ?>" onclick="cambiarTabLogin('staff', this)">
+                    Soy staff
+                </button>
+            </div>
 
             <?php if ($error): ?>
                 <div class="alerta-error">⚠️ <?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
 
-            <form method="POST" action="">
-                <div class="grupo-campo">
-                    <label for="dni">DNI</label>
-                    <input
-                        type="text"
-                        id="dni"
-                        name="dni"
-                        class="campo"
-                        placeholder="Ej: 35987654"
-                        required
-                        maxlength="10"
-                        value="<?= htmlspecialchars($_POST['dni'] ?? '') ?>"
-                    >
-                </div>
-                <div class="grupo-campo">
-                    <label for="password">Contraseña</label>
-                    <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        class="campo"
-                        placeholder="Tu contraseña"
-                        required
-                    >
-                </div>
-                <button type="submit" class="boton-primario">Ingresar al sistema</button>
-            </form>
+            <!-- ── Tab: paciente ── -->
+            <div id="panel-paciente" class="panel-login <?= $tab_activo === 'paciente' ? 'visible' : '' ?>">
+                <form method="POST" action="">
+                    <input type="hidden" name="tipo" value="paciente">
+                    <div class="grupo-campo">
+                        <label for="dni-paciente">DNI</label>
+                        <input
+                            type="text"
+                            id="dni-paciente"
+                            name="dni"
+                            class="campo"
+                            placeholder="Ej: 35987654"
+                            required
+                            maxlength="10"
+                            value="<?= $tab_activo === 'paciente' ? htmlspecialchars($_POST['dni'] ?? '') : '' ?>"
+                        >
+                    </div>
+                    <button type="submit" class="boton-primario">Ver mis turnos</button>
+                </form>
+            </div>
+
+            <!-- ── Tab: staff ── -->
+            <div id="panel-staff" class="panel-login <?= $tab_activo === 'staff' ? 'visible' : '' ?>">
+                <form method="POST" action="">
+                    <input type="hidden" name="tipo" value="staff">
+                    <div class="grupo-campo">
+                        <label for="dni-staff">DNI</label>
+                        <input
+                            type="text"
+                            id="dni-staff"
+                            name="dni"
+                            class="campo"
+                            placeholder="Ej: 35987654"
+                            required
+                            maxlength="10"
+                            value="<?= $tab_activo === 'staff' ? htmlspecialchars($_POST['dni'] ?? '') : '' ?>"
+                        >
+                    </div>
+                    <div class="grupo-campo">
+                        <label for="password">Contraseña</label>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            class="campo"
+                            placeholder="Tu contraseña"
+                            required
+                        >
+                    </div>
+                    <button type="submit" class="boton-primario">Ingresar al sistema</button>
+                </form>
+            </div>
 
             <p class="pie-formulario">Universidad Champagnat · Sistema Académico MediTurnos</p>
         </div>
 
     </div>
 </div>
+
+<script>
+    function cambiarTabLogin(tipo, boton) {
+        document.querySelectorAll('.tab-login').forEach(t => t.classList.remove('activo'));
+        boton.classList.add('activo');
+        document.querySelectorAll('.panel-login').forEach(p => p.classList.remove('visible'));
+        document.getElementById('panel-' + tipo).classList.add('visible');
+    }
+</script>
 
 <?php require_once __DIR__ . '/../../vistas/plantillas/footer.php'; ?>

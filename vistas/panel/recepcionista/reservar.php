@@ -175,6 +175,46 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 
     .separador { border: none; border-top: 1px solid var(--borde); margin: 1.5rem 0; }
 
+    /* ── Grilla de horarios disponibles ── */
+    .grilla-horas {
+        display: grid;
+        grid-template-columns: repeat(4, 80px);
+        gap: 0.6rem;
+    }
+
+    .horas-placeholder { grid-column: 1 / -1; color: var(--texto-suave); font-size: 0.88rem; }
+
+    .slot-hora {
+        width: 80px;
+        height: 50px;
+        border-radius: var(--radio);
+        border: 1.5px solid var(--primario);
+        background: var(--blanco);
+        color: var(--primario);
+        font-family: 'DM Sans', sans-serif;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.3rem;
+        transition: all 0.2s;
+    }
+
+    .slot-hora:hover { background: var(--primario); color: #fff; }
+
+    .slot-hora.seleccionado { background: var(--primario); color: #fff; }
+
+    .slot-hora.ocupado {
+        border-color: var(--borde);
+        background: var(--fondo);
+        color: var(--texto-suave);
+        cursor: not-allowed;
+    }
+
+    .slot-hora.ocupado:hover { background: var(--fondo); color: var(--texto-suave); }
+
     .seccion-titulo {
         font-size: 0.82rem;
         font-weight: 600;
@@ -311,6 +351,13 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     <span class="icono">🔍</span> Buscar paciente
 </a>
 
+        <a href="registrar_medico.php" class="sidebar-link">
+            <span class="icono">👨‍⚕️</span> Registrar médico
+        </a>
+        <a href="gestionar_medicos.php" class="sidebar-link">
+            <span class="icono">👨‍⚕️</span> Gestionar médicos
+        </a>
+
         <div class="sidebar-footer">
             <a href="/mediturnos/vistas/autenticacion/login.php" class="sidebar-link">
                 <span class="icono">🚪</span> Cerrar sesión
@@ -432,11 +479,11 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
                         <label for="fecha">Fecha</label>
                         <input type="date" id="fecha" name="fecha" class="campo" required min="<?= date('Y-m-d') ?>" disabled>
                     </div>
-                    <div class="grupo-campo">
-                        <label for="hora">Hora</label>
-                        <select name="hora" id="hora" class="campo" required disabled>
-                            <option value="">— Elegí una fecha primero —</option>
-                        </select>
+                    <div class="grupo-campo campo-completo">
+                        <label>Hora</label>
+                        <div id="grilla-horas" class="grilla-horas">
+                            <p class="horas-placeholder">— Elegí una fecha primero —</p>
+                        </div>
                     </div>
                     <div class="grupo-campo campo-completo" id="aviso-bloqueo" style="display:none;">
                         <div class="alerta-error">
@@ -445,6 +492,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
                     </div>
                 </div>
 
+                <input type="hidden" name="hora" id="hora" required>
                 <input type="hidden" name="id_consultorio" id="id_consultorio" value="">
 
                 <div class="acciones">
@@ -542,7 +590,8 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     const selectEspecialidad = document.getElementById('id_especialidad');
     const selectMedico       = document.getElementById('matricula');
     const inputFecha         = document.getElementById('fecha');
-    const selectHora         = document.getElementById('hora');
+    const grillaHoras        = document.getElementById('grilla-horas');
+    const inputHora          = document.getElementById('hora');
     const inputConsultorio   = document.getElementById('id_consultorio');
     const diasWrapper        = document.getElementById('dias-atencion-wrapper');
     const diasTexto          = document.getElementById('dias-atencion-texto');
@@ -562,12 +611,40 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         select.disabled = true;
     }
 
+    function resetGrillaHoras(placeholder) {
+        grillaHoras.innerHTML = `<p class="horas-placeholder">${placeholder}</p>`;
+        inputHora.value = '';
+        inputConsultorio.value = '';
+    }
+
+    function renderGrillaHoras(slots) {
+        grillaHoras.innerHTML = '';
+
+        slots.forEach(slot => {
+            const boton = document.createElement('button');
+            boton.type = 'button';
+            boton.className = 'slot-hora ' + (slot.disponible ? 'disponible' : 'ocupado');
+            boton.textContent = (slot.disponible ? '✅ ' : '❌ ') + slot.hora;
+            boton.disabled = !slot.disponible;
+
+            if (slot.disponible) {
+                boton.addEventListener('click', () => {
+                    grillaHoras.querySelectorAll('.slot-hora').forEach(b => b.classList.remove('seleccionado'));
+                    boton.classList.add('seleccionado');
+                    inputHora.value = slot.hora;
+                    inputConsultorio.value = slot.id_consultorio ?? '';
+                });
+            }
+
+            grillaHoras.appendChild(boton);
+        });
+    }
+
     selectEspecialidad.addEventListener('change', async function() {
         resetSelect(selectMedico, '— Elegí una especialidad primero —');
-        resetSelect(selectHora, '— Elegí una fecha primero —');
+        resetGrillaHoras('— Elegí una fecha primero —');
         inputFecha.value = '';
         inputFecha.disabled = true;
-        inputConsultorio.value = '';
         diasWrapper.style.display = 'none';
         avisoBloqueo.style.display = 'none';
         diasPermitidos = [];
@@ -589,9 +666,8 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     });
 
     selectMedico.addEventListener('change', async function() {
-        resetSelect(selectHora, '— Elegí una fecha primero —');
+        resetGrillaHoras('— Elegí una fecha primero —');
         inputFecha.value = '';
-        inputConsultorio.value = '';
         avisoBloqueo.style.display = 'none';
         diasPermitidos = [];
 
@@ -620,8 +696,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     });
 
     inputFecha.addEventListener('change', async function() {
-        resetSelect(selectHora, '— Seleccioná —');
-        inputConsultorio.value = '';
+        resetGrillaHoras('— Seleccioná —');
         avisoBloqueo.style.display = 'none';
 
         const fecha = this.value;
@@ -633,7 +708,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
             avisoBloqueoTexto.textContent = `El médico no atiende los días ${NOMBRES_DIAS[dia]}. Elegí una fecha que coincida con sus días de atención.`;
             avisoBloqueo.style.display = 'block';
             this.value = '';
-            resetSelect(selectHora, '— Elegí una fecha primero —');
+            resetGrillaHoras('— Elegí una fecha primero —');
             return;
         }
 
@@ -646,27 +721,18 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
             avisoBloqueoTexto.textContent = datos.motivo;
             avisoBloqueo.style.display = 'block';
             this.value = '';
-            resetSelect(selectHora, '— Elegí una fecha primero —');
+            resetGrillaHoras('— Elegí una fecha primero —');
             return;
         }
 
         if (datos.slots.length === 0) {
             avisoBloqueoTexto.textContent = 'No hay horarios disponibles para esa fecha.';
             avisoBloqueo.style.display = 'block';
-            resetSelect(selectHora, '— Elegí una fecha primero —');
+            resetGrillaHoras('— Elegí una fecha primero —');
             return;
         }
 
-        selectHora.innerHTML = '<option value="">— Seleccioná —</option>';
-        datos.slots.forEach(hora => {
-            const opcion = document.createElement('option');
-            opcion.value = hora;
-            opcion.textContent = hora;
-            selectHora.appendChild(opcion);
-        });
-        selectHora.disabled = false;
-
-        inputConsultorio.value = datos.id_consultorio ?? '';
+        renderGrillaHoras(datos.slots);
     });
 </script>
 

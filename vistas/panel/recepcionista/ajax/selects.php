@@ -44,28 +44,11 @@ switch ($accion) {
             break;
         }
 
-        $bloques = $controlador->obtenerHorasMedico($matricula, $dia_semana, $id_especialidad);
-
-        $slots          = [];
-        $id_consultorio = null;
-
-        foreach ($bloques as $bloque) {
-            if ($id_consultorio === null) {
-                $id_consultorio = $bloque['id_consultorio'];
-            }
-
-            $inicio = strtotime($bloque['hora_inicio']);
-            $fin    = strtotime($bloque['hora_fin']);
-
-            for ($t = $inicio; $t < $fin; $t += 1800) {
-                $slots[] = date('H:i', $t);
-            }
-        }
+        $slots = $controlador->obtenerDisponibilidad($matricula, $fecha, $dia_semana, $id_especialidad);
 
         echo json_encode([
-            'bloqueada'      => false,
-            'slots'          => $slots,
-            'id_consultorio' => $id_consultorio,
+            'bloqueada' => false,
+            'slots'     => $slots,
         ]);
         break;
 

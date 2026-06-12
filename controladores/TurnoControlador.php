@@ -107,6 +107,55 @@ class TurnoControlador {
         return $this->modelo->fechaBloqueada($matricula, $fecha);
     }
 
+    // Trae los slots de 30 min de un médico en una fecha, marcando disponibilidad real
+    public function obtenerDisponibilidad($matricula, $fecha, $dia_semana, $id_especialidad = null) {
+        return $this->modelo->obtenerDisponibilidad($matricula, $fecha, $dia_semana, $id_especialidad);
+    }
+
+    // Registra un médico nuevo con su especialidad, horarios y usuario de acceso
+    public function registrarMedico($datos) {
+
+        if (empty($datos['dias'])) {
+            throw new Exception('Tenés que seleccionar al menos un día de atención.');
+        }
+
+        if ($datos['hora_inicio'] >= $datos['hora_fin']) {
+            throw new Exception('La hora de inicio debe ser anterior a la hora de fin.');
+        }
+
+        $password = $this->modelo->insertarMedico($datos);
+
+        return [
+            'dni_username' => $datos['dni_username'],
+            'password'     => $password,
+        ];
+    }
+
+    // Trae todos los médicos con especialidad y usuario, para gestión
+    public function obtenerMedicosConDetalles() {
+        return $this->modelo->obtenerMedicosConDetalles();
+    }
+
+    // Resetea la contraseña de un médico y devuelve las nuevas credenciales
+    public function resetearPassword($matricula) {
+        $password = $this->modelo->resetearPasswordMedico($matricula);
+
+        $stmt = $this->pdo->prepare(
+            "SELECT dni_username FROM Usuario WHERE matricula_medico = :matricula"
+        );
+        $stmt->execute([':matricula' => $matricula]);
+        $usuario = $stmt->fetch();
+
+        if (!$usuario) {
+            throw new Exception('Ese médico no tiene un usuario de acceso asociado.');
+        }
+
+        return [
+            'dni'      => $usuario['dni_username'],
+            'password' => $password,
+        ];
+    }
+
     // Suspende la agenda de un médico en una fecha — transacción ACID
     public function suspenderAgenda($matricula, $fecha) {
 

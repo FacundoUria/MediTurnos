@@ -267,6 +267,13 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
             <span class="icono">🚫</span> Suspender agenda
         </a>
 
+        <a href="registrar_medico.php" class="sidebar-link">
+            <span class="icono">👨‍⚕️</span> Registrar médico
+        </a>
+        <a href="gestionar_medicos.php" class="sidebar-link">
+            <span class="icono">👨‍⚕️</span> Gestionar médicos
+        </a>
+
         <div class="sidebar-footer">
             <a href="/mediturnos/vistas/autenticacion/logout.php" class="sidebar-link">
                 <span class="icono">🚪</span> Cerrar sesión

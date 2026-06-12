@@ -50,6 +50,24 @@ class AuthControlador {
         return ['exito' => true, 'destino' => $destino];
     }
 
+    // Acceso de pacientes solo con DNI, sin contraseña
+    public function loginPaciente($dni) {
+
+        $paciente = $this->modelo->buscarPacientePorDni($dni);
+
+        if (!$paciente) {
+            return ['exito' => false, 'mensaje' => 'DNI no encontrado'];
+        }
+
+        session_regenerate_id(true);
+
+        $_SESSION['rol']         = 'Paciente';
+        $_SESSION['id_paciente'] = $paciente['id_paciente'];
+        $_SESSION['dni']         = $dni;
+
+        return ['exito' => true, 'destino' => '/mediturnos/vistas/panel/paciente/index.php'];
+    }
+
     public function logout() {
         // Paso 1: Vaciamos el array de sesión
         $_SESSION = [];

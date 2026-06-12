@@ -312,6 +312,37 @@ public function obtenerHorasMedico($matricula, $dia_semana, $id_especialidad = n
     return $stmt->fetchAll();
 }
 
+// Trae los slots de 30 min del horario del médico ese día, marcando cuáles ya están ocupados
+public function obtenerDisponibilidad($matricula, $fecha, $dia_semana, $id_especialidad = null) {
+    $bloques = $this->obtenerHorasMedico($matricula, $dia_semana, $id_especialidad);
+
+    $stmt = $this->pdo->prepare(
+        "SELECT hora FROM Turno
+         WHERE matricula = :matricula
+         AND   fecha     = :fecha
+         AND   estado NOT IN ('Cancelado', 'Ausente')"
+    );
+    $stmt->execute([':matricula' => $matricula, ':fecha' => $fecha]);
+    $ocupadas = array_map(fn($t) => substr($t['hora'], 0, 5), $stmt->fetchAll());
+
+    $slots = [];
+    foreach ($bloques as $bloque) {
+        $inicio = strtotime($bloque['hora_inicio']);
+        $fin    = strtotime($bloque['hora_fin']);
+
+        for ($t = $inicio; $t < $fin; $t += 1800) {
+            $hora = date('H:i', $t);
+            $slots[] = [
+                'hora'           => $hora,
+                'disponible'     => !in_array($hora, $ocupadas, true),
+                'id_consultorio' => $bloque['id_consultorio'],
+            ];
+        }
+    }
+
+    return $slots;
+}
+
 // Verifica si una fecha está bloqueada para un médico
 public function fechaBloqueada($matricula, $fecha) {
     $stmt = $this->pdo->prepare(
@@ -320,6 +351,107 @@ public function fechaBloqueada($matricula, $fecha) {
     );
     $stmt->execute([':matricula' => $matricula, ':fecha' => $fecha]);
     return $stmt->fetch()['total'] > 0;
+}
+
+// Registra un médico nuevo: datos personales, especialidad, horarios y usuario — transacción ACID
+public function insertarMedico($datos) {
+
+    $this->pdo->beginTransaction();
+
+    try {
+        // PASO 1: Datos del médico
+        $stmt = $this->pdo->prepare(
+            "INSERT INTO Medico (matricula, nombre, apellido, telefono, email)
+             VALUES (:matricula, :nombre, :apellido, :telefono, :email)"
+        );
+        $stmt->execute([
+            ':matricula' => $datos['matricula'],
+            ':nombre'    => $datos['nombre'],
+            ':apellido'  => $datos['apellido'],
+            ':telefono'  => $datos['telefono'],
+            ':email'     => $datos['email'],
+        ]);
+
+        // PASO 2: Especialidad del médico
+        $stmt = $this->pdo->prepare(
+            "INSERT INTO Medico_Especialidad (matricula, id_especialidad)
+             VALUES (:matricula, :id_especialidad)"
+        );
+        $stmt->execute([
+            ':matricula'       => $datos['matricula'],
+            ':id_especialidad' => $datos['id_especialidad'],
+        ]);
+
+        // PASO 3: Un registro de horario por cada día seleccionado
+        $stmt = $this->pdo->prepare(
+            "INSERT INTO Horario_Atencion
+                (matricula, id_consultorio, id_especialidad, dia_semana, hora_inicio, hora_fin, activo)
+             VALUES
+                (:matricula, :id_consultorio, :id_especialidad, :dia_semana, :hora_inicio, :hora_fin, 1)"
+        );
+        foreach ($datos['dias'] as $dia) {
+            $stmt->execute([
+                ':matricula'       => $datos['matricula'],
+                ':id_consultorio'  => $datos['id_consultorio'],
+                ':id_especialidad' => $datos['id_especialidad'],
+                ':dia_semana'      => $dia,
+                ':hora_inicio'     => $datos['hora_inicio'],
+                ':hora_fin'        => $datos['hora_fin'],
+            ]);
+        }
+
+        // PASO 4: Usuario para que el médico pueda loguearse — contraseña autogenerada
+        $password = 'MED#' . $datos['matricula'];
+        $hash     = password_hash($password, PASSWORD_DEFAULT);
+
+        $stmt = $this->pdo->prepare(
+            "INSERT INTO Usuario (dni_username, password_hash, id_rol, id_paciente, matricula_medico)
+             VALUES (:dni_username, :password_hash, 3, NULL, :matricula)"
+        );
+        $stmt->execute([
+            ':dni_username'  => $datos['dni_username'],
+            ':password_hash' => $hash,
+            ':matricula'     => $datos['matricula'],
+        ]);
+
+        $this->pdo->commit();
+
+        return $password;
+
+    } catch (Exception $e) {
+        $this->pdo->rollBack();
+        throw $e;
+    }
+}
+
+// Trae todos los médicos con su especialidad y usuario de acceso
+public function obtenerMedicosConDetalles() {
+    $stmt = $this->pdo->prepare(
+        "SELECT m.matricula, m.nombre, m.apellido,
+                GROUP_CONCAT(DISTINCT e.nombre SEPARATOR ', ') AS especialidades,
+                u.dni_username
+         FROM Medico m
+         LEFT JOIN Medico_Especialidad me ON m.matricula = me.matricula
+         LEFT JOIN Especialidad e         ON me.id_especialidad = e.id_especialidad
+         LEFT JOIN Usuario u              ON u.matricula_medico = m.matricula
+         GROUP BY m.matricula, m.nombre, m.apellido, u.dni_username
+         ORDER BY m.apellido ASC"
+    );
+    $stmt->execute();
+    return $stmt->fetchAll();
+}
+
+// Resetea la contraseña de un médico a MED#<matricula> y devuelve la nueva contraseña en texto plano
+public function resetearPasswordMedico($matricula) {
+    $password = 'MED#' . $matricula;
+    $hash     = password_hash($password, PASSWORD_DEFAULT);
+
+    $stmt = $this->pdo->prepare(
+        "UPDATE Usuario SET password_hash = :hash WHERE matricula_medico = :matricula"
+    );
+    $stmt->execute([':hash' => $hash, ':matricula' => $matricula]);
+
+    return $password;
 }
 
 }
