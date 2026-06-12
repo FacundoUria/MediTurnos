@@ -348,6 +348,9 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         <a href="index.php" class="sidebar-link activo">
             <span class="icono">📅</span> Mi agenda
         </a>
+        <a href="horarios.php" class="sidebar-link">
+            <span class="icono">🕐</span> Mis horarios
+        </a>
 
         <div class="sidebar-footer">
             <a href="/mediturnos/vistas/autenticacion/logout.php" class="sidebar-link">

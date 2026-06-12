@@ -173,4 +173,43 @@ class TurnoControlador {
         // Todo ok — ejecutamos la transacción
         return $this->modelo->suspenderAgenda($matricula, $fecha);
     }
+
+    // Trae los horarios de atención del médico logueado
+    public function obtenerHorariosMedico($matricula) {
+        return $this->modelo->obtenerHorariosMedico($matricula);
+    }
+
+    // Trae las especialidades que dicta el médico logueado
+    public function obtenerEspecialidadesMedico($matricula) {
+        return $this->modelo->obtenerEspecialidadesMedico($matricula);
+    }
+
+    // Agrega un nuevo horario de atención, validando datos
+    public function agregarHorario($datos) {
+        if ($datos['hora_fin'] <= $datos['hora_inicio']) {
+            throw new Exception('La hora de fin debe ser posterior a la hora de inicio.');
+        }
+
+        if ($this->modelo->existeHorario($datos['matricula'], $datos['dia_semana'], $datos['id_consultorio'])) {
+            throw new Exception('Ya existe un horario para ese día en ese consultorio.');
+        }
+
+        $this->modelo->agregarHorario(
+            $datos['matricula'],
+            $datos['id_consultorio'],
+            $datos['id_especialidad'],
+            $datos['dia_semana'],
+            $datos['hora_inicio'],
+            $datos['hora_fin']
+        );
+    }
+
+    // Elimina un horario, verificando que pertenezca al médico
+    public function eliminarHorario($id_horario, $matricula) {
+        $eliminado = $this->modelo->eliminarHorario($id_horario, $matricula);
+        if (!$eliminado) {
+            throw new Exception('No se pudo eliminar el horario (no existe o no te pertenece).');
+        }
+        return $eliminado;
+    }
 }

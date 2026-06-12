@@ -454,4 +454,79 @@ public function resetearPasswordMedico($matricula) {
     return $password;
 }
 
+// Trae los horarios de atención de un médico, con especialidad y consultorio
+public function obtenerHorariosMedico($matricula) {
+    $stmt = $this->pdo->prepare(
+        "SELECT h.id_horario, h.dia_semana, h.hora_inicio, h.hora_fin,
+                h.id_consultorio, h.id_especialidad,
+                e.nombre AS especialidad,
+                c.numero AS consultorio_numero, c.piso AS consultorio_piso
+         FROM Horario_Atencion h
+         JOIN Especialidad e ON h.id_especialidad = e.id_especialidad
+         JOIN Consultorio  c ON h.id_consultorio  = c.id_consultorio
+         WHERE h.matricula = :matricula
+         AND   h.activo = 1
+         ORDER BY h.dia_semana ASC, h.hora_inicio ASC"
+    );
+    $stmt->execute([':matricula' => $matricula]);
+    return $stmt->fetchAll();
+}
+
+// Trae las especialidades que dicta un médico
+public function obtenerEspecialidadesMedico($matricula) {
+    $stmt = $this->pdo->prepare(
+        "SELECT e.id_especialidad, e.nombre
+         FROM Medico_Especialidad me
+         JOIN Especialidad e ON me.id_especialidad = e.id_especialidad
+         WHERE me.matricula = :matricula
+         ORDER BY e.nombre ASC"
+    );
+    $stmt->execute([':matricula' => $matricula]);
+    return $stmt->fetchAll();
+}
+
+// Verifica si el médico ya tiene un horario ese día en ese consultorio
+public function existeHorario($matricula, $dia_semana, $id_consultorio) {
+    $stmt = $this->pdo->prepare(
+        "SELECT COUNT(*) AS total FROM Horario_Atencion
+         WHERE matricula = :matricula
+         AND   dia_semana = :dia
+         AND   id_consultorio = :id_consultorio
+         AND   activo = 1"
+    );
+    $stmt->execute([
+        ':matricula'      => $matricula,
+        ':dia'            => $dia_semana,
+        ':id_consultorio' => $id_consultorio,
+    ]);
+    return $stmt->fetch()['total'] > 0;
+}
+
+// Agrega un nuevo horario de atención para el médico
+public function agregarHorario($matricula, $id_consultorio, $id_especialidad, $dia_semana, $hora_inicio, $hora_fin) {
+    $stmt = $this->pdo->prepare(
+        "INSERT INTO Horario_Atencion
+            (matricula, id_consultorio, id_especialidad, dia_semana, hora_inicio, hora_fin, activo)
+         VALUES
+            (:matricula, :id_consultorio, :id_especialidad, :dia_semana, :hora_inicio, :hora_fin, 1)"
+    );
+    $stmt->execute([
+        ':matricula'       => $matricula,
+        ':id_consultorio'  => $id_consultorio,
+        ':id_especialidad' => $id_especialidad,
+        ':dia_semana'      => $dia_semana,
+        ':hora_inicio'     => $hora_inicio,
+        ':hora_fin'        => $hora_fin,
+    ]);
+}
+
+// Elimina un horario, verificando que pertenezca al médico
+public function eliminarHorario($id_horario, $matricula) {
+    $stmt = $this->pdo->prepare(
+        "DELETE FROM Horario_Atencion WHERE id_horario = :id AND matricula = :matricula"
+    );
+    $stmt->execute([':id' => $id_horario, ':matricula' => $matricula]);
+    return $stmt->rowCount() > 0;
+}
+
 }
