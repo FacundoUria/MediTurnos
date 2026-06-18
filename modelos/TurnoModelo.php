@@ -443,7 +443,8 @@ public function obtenerMedicosConDetalles() {
 
 // Resetea la contraseña de un médico a MED#<matricula> y devuelve la nueva contraseña en texto plano
 public function resetearPasswordMedico($matricula) {
-    $password = 'MED#' . $matricula;
+    $suffix   = str_pad((string) rand(1000, 9999), 4, '0', STR_PAD_LEFT);
+    $password = 'MED#' . $matricula . '#' . $suffix;
     $hash     = password_hash($password, PASSWORD_DEFAULT);
 
     $stmt = $this->pdo->prepare(

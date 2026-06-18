@@ -9,6 +9,12 @@
  * ---------------------------------------------------------------
  */
 session_start();
+
+if (!isset($_SESSION['rol']) || !in_array($_SESSION['rol'], ['Recepcionista', 'Administrador'])) {
+    header('Location: /mediturnos/vistas/autenticacion/login.php');
+    exit;
+}
+
 require_once __DIR__ . '/../../../configuracion/conexion.php';
 require_once __DIR__ . '/../../../controladores/TurnoControlador.php';
 
@@ -271,7 +277,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
             <span class="icono">👨‍⚕️</span> Registrar médico
         </a>
         <a href="gestionar_medicos.php" class="sidebar-link">
-            <span class="icono">👨‍⚕️</span> Gestionar médicos
+            <span class="icono">📋</span> Gestionar médicos
         </a>
 
         <div class="sidebar-footer">

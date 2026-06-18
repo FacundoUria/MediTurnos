@@ -3,49 +3,21 @@
  * vistas/panel/recepcionista/gestionar_medicos.php
  * ---------------------------------------------------------------
  * Lista de médicos registrados con opción de resetear su
- * contraseña a un valor por defecto (MED#<matricula>).
+ * contraseña a un valor nuevo y aleatorio (MED#<matricula>#XXXX).
  * ---------------------------------------------------------------
  */
 session_start();
+
+if (!isset($_SESSION['rol']) || !in_array($_SESSION['rol'], ['Recepcionista', 'Administrador'])) {
+    header('Location: /mediturnos/vistas/autenticacion/login.php');
+    exit;
+}
+
 require_once __DIR__ . '/../../../configuracion/conexion.php';
 require_once __DIR__ . '/../../../controladores/TurnoControlador.php';
 
 $controlador = new TurnoControlador($pdo);
-
-$mensaje      = '';
-$tipo_msg     = '';
-$credenciales = null;
-$apellido_reseteado = '';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['matricula'])) {
-    $matricula = $_POST['matricula'];
-
-    try {
-        $credenciales = $controlador->resetearPassword($matricula);
-
-        $mensaje  = '✅ Contraseña reseteada correctamente.';
-        $tipo_msg = 'exito';
-
-    } catch (PDOException $e) {
-        $mensaje  = '❌ Error al resetear: ' . $e->getMessage();
-        $tipo_msg = 'error';
-    } catch (Exception $e) {
-        $mensaje  = '❌ ' . $e->getMessage();
-        $tipo_msg = 'error';
-    }
-}
-
-$medicos = $controlador->obtenerMedicosConDetalles();
-
-// Buscamos el apellido del médico al que se le reseteó la contraseña, para el mensaje
-if ($credenciales) {
-    foreach ($medicos as $m) {
-        if ((string)$m['matricula'] === (string)$_POST['matricula']) {
-            $apellido_reseteado = $m['apellido'];
-            break;
-        }
-    }
-}
+$medicos     = $controlador->obtenerMedicosConDetalles();
 
 require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 ?>
@@ -195,6 +167,22 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
     }
 
     .boton-reset:hover { background: var(--primario); color: #fff; }
+
+    .boton-secundario {
+        margin-top: 1rem;
+        padding: 0.6rem 1.2rem;
+        border-radius: var(--radio);
+        border: 1.5px solid var(--borde);
+        background: white;
+        color: var(--texto);
+        font-family: 'DM Sans', sans-serif;
+        font-size: 0.88rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .boton-secundario:hover { border-color: var(--primario); color: var(--primario); }
 </style>
 
 <div class="layout">
@@ -223,7 +211,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
             <span class="icono">👨‍⚕️</span> Registrar médico
         </a>
         <a href="gestionar_medicos.php" class="sidebar-link activo">
-            <span class="icono">👨‍⚕️</span> Gestionar médicos
+            <span class="icono">📋</span> Gestionar médicos
         </a>
 
         <div class="sidebar-footer">
@@ -240,22 +228,17 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
             <p>Listado de médicos registrados y reseteo de contraseña de acceso</p>
         </div>
 
-        <?php if ($mensaje): ?>
-            <div class="alerta-<?= $tipo_msg ?>" style="margin-bottom:1.5rem;">
-                <?= htmlspecialchars($mensaje) ?>
+        <div id="credenciales-card" class="credenciales-card" style="display:none;">
+            <h3 id="credenciales-titulo"></h3>
+            <div class="credenciales-datos">
+                <strong>Usuario:</strong> <span id="credenciales-dni"></span><br>
+                <strong>Contraseña:</strong> <span id="credenciales-password"></span>
             </div>
-        <?php endif; ?>
+            <p class="credenciales-aviso">⚠️ Anotá estas credenciales antes de cerrar.</p>
+            <button type="button" class="boton-secundario" onclick="cerrarCredenciales()">Cerrar</button>
+        </div>
 
-        <?php if ($credenciales): ?>
-            <div class="credenciales-card">
-                <h3>✅ Contraseña reseteada para Dr/a. <?= htmlspecialchars($apellido_reseteado) ?></h3>
-                <div class="credenciales-datos">
-                    <strong>Usuario:</strong> <?= htmlspecialchars($credenciales['dni']) ?><br>
-                    <strong>Contraseña:</strong> <?= htmlspecialchars($credenciales['password']) ?>
-                </div>
-                <p class="credenciales-aviso">⚠️ Esta información solo se muestra una vez.</p>
-            </div>
-        <?php endif; ?>
+        <div id="error-card" class="alerta-error" style="display:none; margin-bottom:1.5rem;"></div>
 
         <div class="tabla-card">
             <h3>Médicos registrados</h3>
@@ -280,10 +263,10 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
                             <td><?= htmlspecialchars($m['dni_username'] ?? '—') ?></td>
                             <td>
                                 <?php if ($m['dni_username']): ?>
-                                    <form method="POST" action="" onsubmit="return confirm('¿Resetear la contraseña de Dr/a. <?= htmlspecialchars($m['apellido'], ENT_QUOTES) ?> a MED#<?= htmlspecialchars($m['matricula'], ENT_QUOTES) ?>?');">
-                                        <input type="hidden" name="matricula" value="<?= htmlspecialchars($m['matricula']) ?>">
-                                        <button type="submit" class="boton-reset">Resetear contraseña</button>
-                                    </form>
+                                    <button type="button" class="boton-reset"
+                                        onclick="resetearPassword('<?= htmlspecialchars($m['matricula'], ENT_QUOTES) ?>', '<?= htmlspecialchars($m['apellido'], ENT_QUOTES) ?>')">
+                                        Resetear contraseña
+                                    </button>
                                 <?php else: ?>
                                     —
                                 <?php endif; ?>
@@ -296,5 +279,54 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 
     </main>
 </div>
+
+<script>
+    function cerrarCredenciales() {
+        document.getElementById('credenciales-card').style.display = 'none';
+    }
+
+    function cerrarError() {
+        document.getElementById('error-card').style.display = 'none';
+    }
+
+    async function resetearPassword(matricula, apellido) {
+        if (!confirm('¿Resetear la contraseña de Dr/a. ' + apellido + '? Se generará una contraseña nueva.')) {
+            return;
+        }
+
+        cerrarCredenciales();
+        cerrarError();
+
+        try {
+            const respuesta = await fetch('ajax/resetear_password.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'matricula=' + encodeURIComponent(matricula),
+            });
+
+            const datos = await respuesta.json();
+
+            if (datos.exito) {
+                const ahora = new Date();
+                const fecha = ahora.toLocaleDateString();
+                const hora  = ahora.toLocaleTimeString();
+
+                document.getElementById('credenciales-titulo').textContent =
+                    '✅ Contraseña reseteada — ' + datos.nombre + ' (reseteado el ' + fecha + ' a las ' + hora + ')';
+                document.getElementById('credenciales-dni').textContent      = datos.dni;
+                document.getElementById('credenciales-password').textContent = datos.password;
+                document.getElementById('credenciales-card').style.display   = 'block';
+            } else {
+                const errorCard = document.getElementById('error-card');
+                errorCard.textContent = '❌ ' + (datos.mensaje || 'Error al resetear');
+                errorCard.style.display = 'block';
+            }
+        } catch (e) {
+            const errorCard = document.getElementById('error-card');
+            errorCard.textContent = '❌ Error de conexión al resetear la contraseña.';
+            errorCard.style.display = 'block';
+        }
+    }
+</script>
 
 <?php require_once __DIR__ . '/../../../vistas/plantillas/footer.php'; ?>

@@ -2,3 +2,194 @@ configuracion/ → es la conexión a la base de datos. No es M, ni V, ni C — e
 modelos/ → la M de MVC. Solo hablan con la base de datos. No saben nada de HTML.
 controladores/ → la C de MVC. Son el cerebro — reciben los datos del formulario, llaman al modelo y le mandan el resultado a la vista.
 vistas/ → la V de MVC. Solo muestran HTML. No consultan la DB nunca.
+
+
+
+---------------------------------
+
+
+OGIN — vistas/autenticacion/login.php
+Tab "Soy paciente" → botón "Ver mis turnos"
+
+Envía POST con tipo=paciente y dni
+login.php llama a AuthControlador->loginPaciente($dni)
+AuthControlador llama a UsuarioModelo->buscarPacientePorDni($dni)
+Si existe → guarda sesión → redirige a panel/paciente/index.php
+
+Tab "Soy staff" → botón "Ingresar al sistema"
+
+Envía POST con tipo=staff, dni y password
+login.php llama a AuthControlador->login($dni, $password)
+AuthControlador llama a UsuarioModelo->buscarPorDni($dni)
+Verifica hash con password_verify()
+Redirige según rol a recepcionista/index.php o medico/index.php
+
+
+RECEPCIONISTA — index.php
+Filtros Hoy / Este mes / Rango personalizado
+
+Son links GET con ?filtro=hoy, ?filtro=mes, ?filtro=personalizado
+index.php llama a TurnoControlador->obtenerTurnosPorFecha($desde, $hasta)
+Que llama a TurnoModelo->obtenerTurnosPorFecha()
+
+KPIs (números arriba)
+
+Se calculan con TurnoControlador->obtenerKpis()
+Que llama a TurnoModelo->contarTurnosHoy()
+Siempre muestran el día de hoy independiente del filtro
+
+Botón "＋ Nuevo turno"
+
+Link simple a reservar.php
+
+Botón "Gestionar" en cada fila
+
+⚠️ Apunta a cancelar.php que no existe — hay que cambiarlo a paciente.php
+
+
+RESERVAR TURNO — reservar.php
+Tab "Paciente existente" → buscador
+
+Filtra en el cliente con JavaScript puro sobre el array $datos['pacientes'] cargado desde TurnoControlador->obtenerDatosFormulario() que llama a TurnoModelo->obtenerPacientes()
+Al seleccionar un resultado guarda el id_paciente en un input hidden
+
+Tab "Paciente nuevo" → campos de formulario
+
+Al confirmar reserva envía POST con tipo_paciente=nuevo
+reservar.php llama a TurnoControlador->registrarPaciente($datos)
+Que llama a TurnoModelo->insertarPaciente()
+
+Select Especialidad
+
+onchange dispara fetch() a ajax/selects.php?accion=medicos_por_especialidad&id_especialidad=X
+selects.php llama a TurnoControlador->obtenerMedicosPorEspecialidad()
+Que llama a TurnoModelo->obtenerMedicosPorEspecialidad()
+Devuelve JSON con médicos → actualiza el select de médico
+
+Select Médico
+
+onchange dispara fetch() a ajax/selects.php?accion=dias_medico&matricula=X&id_especialidad=Y
+selects.php llama a TurnoControlador->obtenerDiasMedico()
+Que llama a TurnoModelo->obtenerDiasMedico()
+Devuelve JSON con días → muestra "Atiende los días: Lunes, Miércoles..."
+Habilita el input de fecha
+
+Input Fecha
+
+onchange verifica primero que el día de la semana sea válido para ese médico (lógica JS pura)
+Luego fetch() a ajax/selects.php?accion=horas_medico&matricula=X&fecha=Y&dia_semana=Z
+selects.php primero llama a TurnoControlador->fechaBloqueada() → TurnoModelo->fechaBloqueada() → consulta Agenda_Bloqueada
+Si no está bloqueada llama a TurnoControlador->obtenerDisponibilidad() → TurnoModelo->obtenerDisponibilidad()
+Que genera slots de 30 minutos y verifica cuáles están ocupados en Turno
+Devuelve JSON con slots disponibles/ocupados → renderiza grilla de botones
+
+Botones de hora (✅/❌)
+
+Click en hora disponible guarda valor en input hidden name="hora" y name="id_consultorio"
+
+Botón "Confirmar reserva"
+
+Envía POST completo
+reservar.php llama a TurnoControlador->reservarTurno()
+Que ejecuta CALL ReservarTurno(...) — el SP en MySQL
+
+
+BUSCAR PACIENTE — paciente.php
+Input buscador "Nombre o DNI"
+
+Filtra en el cliente con JavaScript sobre array $pacientes cargado desde TurnoControlador->obtenerDatosFormulario()['pacientes']
+Al clickear un resultado navega a paciente.php?id_paciente=X via link GET
+paciente.php llama a TurnoControlador->obtenerPaciente($id) → TurnoModelo->obtenerPacientePorId()
+Y a TurnoControlador->obtenerTurnosPaciente($id) → TurnoModelo->obtenerTurnosPorPaciente()
+
+Botones Confirmar / Realizado / Ausente / Cancelar
+
+Cada uno es un mini formulario POST independiente con id_turno y estado_nuevo
+paciente.php llama a TurnoControlador->cambiarEstado($id_turno, $estado_nuevo)
+Que llama a TurnoModelo->cambiarEstadoTurno() → ejecuta UPDATE Turno SET estado = ...
+El trigger LogTurno en MySQL detecta el UPDATE y registra automáticamente en Historial_Turno
+
+Botón "➕ Reservar turno"
+
+Link simple a reservar.php
+
+
+SUSPENDER AGENDA — suspender.php
+Select Médico + Input Fecha → botón "Confirmar suspensión"
+
+Muestra confirm() de JavaScript para confirmar
+Envía POST con matricula y fecha
+suspender.php llama a TurnoControlador->suspenderAgenda($matricula, $fecha)
+Controlador valida que la fecha no sea pasada y que haya turnos pendientes
+Llama a TurnoModelo->suspenderAgenda() que abre beginTransaction() y ejecuta:
+
+obtenerTurnosPendientesPorFecha() — guarda lista de afectados
+UPDATE Turno SET estado = 'Cancelado' — cancela todos
+INSERT INTO Historial_Turno por cada turno — registra historial
+INSERT INTO Agenda_Bloqueada — bloquea la fecha
+commit() o rollBack() si algo falla
+
+
+Muestra tabla con los pacientes afectados para reasignación manual
+
+
+REGISTRAR MÉDICO — registrar_medico.php
+Formulario completo → botón "Registrar médico"
+
+Envía POST con todos los campos
+registrar_medico.php llama a TurnoControlador->registrarMedico($datos)
+Controlador valida que haya días seleccionados y que hora_fin > hora_inicio
+Llama a TurnoModelo->insertarMedico() que abre beginTransaction() y ejecuta:
+
+INSERT INTO Medico
+INSERT INTO Medico_Especialidad
+INSERT INTO Horario_Atencion por cada día seleccionado
+Genera contraseña MED#<matricula>, la hashea e INSERT INTO Usuario
+commit() o rollBack()
+
+
+Muestra credenciales una sola vez en pantalla
+
+
+GESTIONAR MÉDICOS — gestionar_medicos.php
+Botón "Resetear contraseña"
+
+onclick llama a función JS resetearPassword(matricula, apellido)
+Muestra confirm() de JavaScript
+fetch() POST a ajax/resetear_password.php con matricula
+resetear_password.php llama a TurnoControlador->resetearPassword($matricula)
+Controlador llama a TurnoModelo->resetearPasswordMedico() que genera MED#<matricula>#XXXX aleatorio, lo hashea y hace UPDATE Usuario SET password_hash
+Consulta nombre del médico en Medico
+Devuelve JSON con dni, password y nombre
+JavaScript muestra el recuadro verde con las nuevas credenciales sin recargar la página
+
+
+PANEL MÉDICO — medico/index.php
+Filtros Hoy / Este mes / Rango personalizado
+
+Links GET y formulario GET igual que el recepcionista
+Pero el SQL se ejecuta directamente en la vista filtrando por $_SESSION['matricula']
+⚠️ Esto rompe MVC — debería ir por el controlador
+
+
+PANEL MÉDICO — medico/horarios.php
+Botón "Eliminar" en cada horario
+
+Formulario POST con accion=eliminar e id_horario
+Llama a TurnoControlador->eliminarHorario($id_horario, $matricula)
+Que llama a TurnoModelo->eliminarHorario() → DELETE FROM Horario_Atencion WHERE id_horario = X AND matricula = Y
+
+Formulario "Agregar nuevo horario"
+
+POST con accion=agregar, día, especialidad, horas y consultorio
+Llama a TurnoControlador->agregarHorario($datos)
+Controlador valida que hora_fin > hora_inicio y que no exista conflicto
+Llama a TurnoModelo->agregarHorario() → INSERT INTO Horario_Atencion
+
+
+PANEL PACIENTE — paciente/index.php
+Solo lectura — no tiene interacciones
+
+Al cargar consulta directamente con $pdo (sin controlador — ⚠️ rompe MVC)
+Muestra próximos turnos y historial
+Botón "🚪 Salir" → link a logout.php
