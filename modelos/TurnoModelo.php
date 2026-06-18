@@ -55,8 +55,9 @@ class TurnoModelo {
 
     // Trae turnos por rango de fechas
     public function obtenerTurnosPorFecha($fecha_desde, $fecha_hasta) {
-        $sql = "SELECT 
+        $sql = "SELECT
                     t.id_turno,
+                    t.id_paciente,
                     t.fecha,
                     t.hora,
                     t.estado,
@@ -530,4 +531,82 @@ public function eliminarHorario($id_horario, $matricula) {
     return $stmt->rowCount() > 0;
 }
 
+    public function obtenerTurnosPorMedico($matricula, $fecha_desde, $fecha_hasta) {
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                t.id_turno,
+                t.fecha,
+                t.hora,
+                t.estado,
+                CONCAT(p.apellido, ', ', p.nombre) AS paciente,
+                p.dni,
+                p.telefono,
+                e.nombre AS especialidad,
+                c.numero AS consultorio
+             FROM Turno t
+             JOIN Paciente     p ON t.id_paciente    = p.id_paciente
+             JOIN Especialidad e ON t.id_especialidad = e.id_especialidad
+             JOIN Consultorio  c ON t.id_consultorio  = c.id_consultorio
+             WHERE t.matricula = :matricula
+             AND   t.fecha BETWEEN :desde AND :hasta
+             ORDER BY t.fecha ASC, t.hora ASC"
+        );
+        $stmt->execute([
+            ':matricula' => $matricula,
+            ':desde'     => $fecha_desde,
+            ':hasta'     => $fecha_hasta,
+        ]);
+        return $stmt->fetchAll();
+    }
+
+    public function obtenerKpisMedico($matricula) {
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                COUNT(*)                   AS total,
+                SUM(estado = 'Pendiente')  AS pendientes,
+                SUM(estado = 'Confirmado') AS confirmados
+             FROM Turno
+             WHERE matricula = :matricula
+             AND   fecha = CURDATE()"
+        );
+        $stmt->execute([':matricula' => $matricula]);
+        return $stmt->fetch();
+    }
+
+    public function obtenerMedico($matricula) {
+        $stmt = $this->pdo->prepare(
+            "SELECT nombre, apellido FROM Medico WHERE matricula = :matricula"
+        );
+        $stmt->execute([':matricula' => $matricula]);
+        return $stmt->fetch();
+    }
+
+    public function obtenerDatosPaciente($id_paciente) {
+        $stmt = $this->pdo->prepare(
+            "SELECT nombre, apellido, dni FROM Paciente WHERE id_paciente = :id"
+        );
+        $stmt->execute([':id' => $id_paciente]);
+        return $stmt->fetch();
+    }
+
+    public function obtenerTurnosCompletoPaciente($id_paciente) {
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                t.id_turno,
+                t.fecha,
+                t.hora,
+                t.estado,
+                CONCAT('Dr/a. ', m.apellido) AS medico,
+                e.nombre                     AS especialidad,
+                c.numero                     AS consultorio
+             FROM Turno t
+             JOIN Medico       m ON t.matricula        = m.matricula
+             JOIN Especialidad e ON t.id_especialidad  = e.id_especialidad
+             JOIN Consultorio  c ON t.id_consultorio   = c.id_consultorio
+             WHERE t.id_paciente = :id
+             ORDER BY t.fecha DESC, t.hora DESC"
+        );
+        $stmt->execute([':id' => $id_paciente]);
+        return $stmt->fetchAll();
+    }
 }

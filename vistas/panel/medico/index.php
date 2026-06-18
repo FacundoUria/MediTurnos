@@ -16,9 +16,10 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'Medico') {
 }
 
 require_once __DIR__ . '/../../../configuracion/conexion.php';
+require_once __DIR__ . '/../../../controladores/TurnoControlador.php';
 
-// Traemos los turnos del médico logueado
-$matricula = $_SESSION['matricula'];
+$controlador = new TurnoControlador($pdo);
+$matricula   = $_SESSION['matricula'];
 
 $filtro      = $_GET['filtro']      ?? 'hoy';
 $fecha_desde = date('Y-m-d');
@@ -32,51 +33,9 @@ if ($filtro === 'mes') {
     $fecha_hasta = $_GET['fecha_hasta'] ?? date('Y-m-d');
 }
 
-// Traemos los turnos del médico
-$sql = "SELECT
-            t.id_turno,
-            t.fecha,
-            t.hora,
-            t.estado,
-            CONCAT(p.apellido, ', ', p.nombre) AS paciente,
-            p.dni,
-            p.telefono,
-            e.nombre AS especialidad,
-            c.numero AS consultorio
-        FROM Turno t
-        JOIN Paciente     p ON t.id_paciente    = p.id_paciente
-        JOIN Especialidad e ON t.id_especialidad = e.id_especialidad
-        JOIN Consultorio  c ON t.id_consultorio  = c.id_consultorio
-        WHERE t.matricula = :matricula
-        AND   t.fecha BETWEEN :desde AND :hasta
-        ORDER BY t.fecha ASC, t.hora ASC";
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute([
-    ':matricula' => $matricula,
-    ':desde'     => $fecha_desde,
-    ':hasta'     => $fecha_hasta,
-]);
-$turnos = $stmt->fetchAll();
-
-// KPIs del día
-$sql_kpi = "SELECT
-                COUNT(*)                  AS total,
-                SUM(estado = 'Pendiente') AS pendientes,
-                SUM(estado = 'Confirmado') AS confirmados
-            FROM Turno
-            WHERE matricula = :matricula
-            AND   fecha = CURDATE()";
-
-$stmt_kpi = $pdo->prepare($sql_kpi);
-$stmt_kpi->execute([':matricula' => $matricula]);
-$kpis = $stmt_kpi->fetch();
-
-// Traemos el nombre del médico
-$sql_med = "SELECT nombre, apellido FROM Medico WHERE matricula = :matricula";
-$stmt_med = $pdo->prepare($sql_med);
-$stmt_med->execute([':matricula' => $matricula]);
-$medico = $stmt_med->fetch();
+$turnos = $controlador->obtenerTurnosPorMedico($matricula, $fecha_desde, $fecha_hasta);
+$kpis   = $controlador->obtenerKpisMedico($matricula);
+$medico = $controlador->obtenerMedico($matricula);
 
 require_once __DIR__ . '/../../../vistas/plantillas/header.php';
 ?>

@@ -212,4 +212,24 @@ class TurnoControlador {
         }
         return $eliminado;
     }
+
+    public function obtenerTurnosPorMedico($matricula, $fecha_desde, $fecha_hasta) {
+        return $this->modelo->obtenerTurnosPorMedico($matricula, $fecha_desde, $fecha_hasta);
+    }
+
+    public function obtenerKpisMedico($matricula) {
+        return $this->modelo->obtenerKpisMedico($matricula);
+    }
+
+    public function obtenerMedico($matricula) {
+        return $this->modelo->obtenerMedico($matricula);
+    }
+
+    public function obtenerDatosPaciente($id_paciente) {
+        return $this->modelo->obtenerDatosPaciente($id_paciente);
+    }
+
+    public function obtenerTurnosCompletoPaciente($id_paciente) {
+        return $this->modelo->obtenerTurnosCompletoPaciente($id_paciente);
+    }
 }

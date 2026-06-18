@@ -365,7 +365,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         </a>
 
         <div class="sidebar-footer">
-            <a href="/mediturnos/vistas/autenticacion/login.php" class="sidebar-link">
+            <a href="/mediturnos/vistas/autenticacion/logout.php" class="sidebar-link">
                 <span class="icono">🚪</span> Cerrar sesión
             </a>
         </div>

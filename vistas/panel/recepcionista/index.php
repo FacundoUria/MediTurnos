@@ -346,9 +346,9 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
             <span class="icono">➕</span> Reservar turno
         </a>
         <a href="suspender.php" class="sidebar-link">
-    <span class="icono">🚫</span> Suspender agenda
-</a>
-       
+            <span class="icono">🚫</span> Suspender agenda
+        </a>
+
         <a href="paciente.php" class="sidebar-link">
             <span class="icono">🔍</span> Buscar paciente
         </a>
@@ -361,10 +361,10 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
         </a>
 
         <div class="sidebar-footer">
-    <a href="/mediturnos/vistas/autenticacion/logout.php" class="sidebar-link">
-        <span class="icono">🚪</span> Cerrar sesión
-    </a>
-</div>
+            <a href="/mediturnos/vistas/autenticacion/logout.php" class="sidebar-link">
+                <span class="icono">🚪</span> Cerrar sesión
+            </a>
+        </div>
     </aside>
 
     <main class="contenido">
@@ -480,7 +480,7 @@ require_once __DIR__ . '/../../../vistas/plantillas/header.php';
                                 </span>
                             </td>
                             <td>
-                                <a href="paciente.php" class="btn-accion">
+                                <a href="paciente.php?id_paciente=<?= $turno['id_paciente'] ?>" class="btn-accion">
                                     Gestionar
                                 </a>
                             </td>

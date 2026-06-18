@@ -15,34 +15,13 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'Paciente') {
 }
 
 require_once __DIR__ . '/../../../configuracion/conexion.php';
+require_once __DIR__ . '/../../../controladores/TurnoControlador.php';
 
+$controlador = new TurnoControlador($pdo);
 $id_paciente = $_SESSION['id_paciente'];
 
-// Traemos los datos del paciente
-$sql_pac = "SELECT nombre, apellido, dni FROM Paciente WHERE id_paciente = :id";
-$stmt    = $pdo->prepare($sql_pac);
-$stmt->execute([':id' => $id_paciente]);
-$paciente = $stmt->fetch();
-
-// Traemos sus turnos ordenados por fecha
-$sql = "SELECT
-            t.id_turno,
-            t.fecha,
-            t.hora,
-            t.estado,
-            CONCAT('Dr/a. ', m.apellido) AS medico,
-            e.nombre                     AS especialidad,
-            c.numero                     AS consultorio
-        FROM Turno t
-        JOIN Medico       m ON t.matricula        = m.matricula
-        JOIN Especialidad e ON t.id_especialidad  = e.id_especialidad
-        JOIN Consultorio  c ON t.id_consultorio   = c.id_consultorio
-        WHERE t.id_paciente = :id
-        ORDER BY t.fecha DESC, t.hora DESC";
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute([':id' => $id_paciente]);
-$turnos = $stmt->fetchAll();
+$paciente = $controlador->obtenerDatosPaciente($id_paciente);
+$turnos   = $controlador->obtenerTurnosCompletoPaciente($id_paciente);
 
 // Separamos próximos y pasados
 $proximos = array_filter($turnos, fn($t) => $t['fecha'] >= date('Y-m-d') && $t['estado'] !== 'Cancelado');
