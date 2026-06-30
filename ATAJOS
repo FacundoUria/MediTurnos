@@ -1,0 +1,51 @@
+Stored Procedures — 
+→ phpMyAdmin → base de datos mediturnos → pestaña Routines
+→ Ahí ves ReservarTurno y CancelarTurno
+
+Trigger — 
+→ phpMyAdmin → tabla Turno → pestaña Triggers
+→ Ahí ves LogTurno
+
+Vistas — 
+→ phpMyAdmin → panel izquierdo, aparecen mezcladas con las tablas con ícono distinto
+→ O corrés SHOW FULL TABLES WHERE TABLE_TYPE = 'VIEW'
+→ Ahí ves vista_agenda_hoy, vista_turnos_pendientes, vista_medicos_horarios
+
+Índices — 
+→ phpMyAdmin → tabla Turno → pestaña Structure → sección Indexes
+→ Ahí ves idx_turno_fecha, idx_turno_matricula, etc
+
+Transacciones — 
+→ modelos/TurnoModelo.php
+→ Método suspenderAgenda() — línea con beginTransaction
+→ Método insertarMedico() — línea con beginTransaction
+
+Sesiones — 
+→ controladores/AuthControlador.php
+→ Método login() — donde dice $_SESSION
+→ Método logout() — donde dice session_destroy()
+
+Seguridad — 
+→ controladores/AuthControlador.php → password_hash, password_verify, session_regenerate_id
+→ modelos/TurnoModelo.php → todos los prepare() y execute() son prepared statements
+→ Todas las vistas → htmlspecialchars()
+
+CRUD — 
+→ modelos/TurnoModelo.php → todos los métodos
+→ Create → insertarPaciente(), insertarMedico(), agregarHorario()
+→ Read → obtenerTurnosHoy(), obtenerPacientes(), obtenerMedicos()
+→ Update → cambiarEstadoTurno(), resetearPasswordMedico()
+→ Delete → eliminarHorario()
+
+Normalización — 
+→ phpMyAdmin → estructura de tablas
+→ Demostrás con Medico_Especialidad (relación N:M), Historial_Turno separado de Turno, Plan_OS separado de Obra_Social
+
+
+
+Regla simple para recordar
+
+Ves algo en pantalla → está en vistas/
+Hay lógica de negocio → está en controladores/
+Hay SQL → está en modelos/
+Hay SP, triggers, vistas, índices → está en phpMyAdmin

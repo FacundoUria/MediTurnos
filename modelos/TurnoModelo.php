@@ -16,25 +16,11 @@ class TurnoModelo {
         $this->pdo = $pdo;
     }
 
-    // Trae todos los turnos del día de hoy con JOINs
+    // Trae todos los turnos del día de hoy con 
     public function obtenerTurnosHoy() {
-        $sql = "SELECT 
-                    t.id_turno,
-                    t.hora,
-                    t.estado,
-                    CONCAT(p.apellido, ', ', p.nombre) AS paciente,
-                    CONCAT('Dr/a. ', m.apellido)       AS medico,
-                    e.nombre                           AS especialidad,
-                    c.numero                           AS consultorio
-                FROM Turno t
-                JOIN Paciente     p ON t.id_paciente    = p.id_paciente
-                JOIN Medico       m ON t.matricula       = m.matricula
-                JOIN Especialidad e ON t.id_especialidad = e.id_especialidad
-                JOIN Consultorio  c ON t.id_consultorio  = c.id_consultorio
-                WHERE t.fecha = CURDATE()
-                ORDER BY t.hora ASC";
-
-        $stmt = $this->pdo->prepare($sql);
+        $stmt = $this->pdo->prepare(
+            "SELECT * FROM vista_agenda_hoy ORDER BY hora ASC"
+        );
         $stmt->execute();
         return $stmt->fetchAll();
     }
@@ -229,19 +215,7 @@ public function suspenderAgenda($matricula, $fecha) {
         );
         $stmt->execute([':matricula' => $matricula, ':fecha' => $fecha]);
 
-        // PASO 3: Insertamos un registro en Historial_Turno por cada turno
-        $stmt_hist = $this->pdo->prepare(
-            "INSERT INTO Historial_Turno
-                (id_turno, estado_anterior, estado_nuevo, fecha_cambio, observacion)
-             VALUES
-                (:id_turno, 'Pendiente', 'Cancelado', NOW(), 'Ausencia de profesional')"
-        );
-
-        foreach ($turnos as $turno) {
-            $stmt_hist->execute([':id_turno' => $turno['id_turno']]);
-        }
-
-        // PASO 4: Bloqueamos la agenda para esa fecha
+        // PASO 3: Bloqueamos la agenda para esa fecha
         $stmt_blq = $this->pdo->prepare(
             "INSERT INTO Agenda_Bloqueada (matricula, fecha, motivo)
              VALUES (:matricula, :fecha, 'Ausencia de profesional')"
@@ -607,6 +581,22 @@ public function eliminarHorario($id_horario, $matricula) {
              ORDER BY t.fecha DESC, t.hora DESC"
         );
         $stmt->execute([':id' => $id_paciente]);
+        return $stmt->fetchAll();
+    }
+
+    public function obtenerTurnosPendientes() {
+        $stmt = $this->pdo->prepare(
+            "SELECT * FROM vista_turnos_pendientes"
+        );
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    public function obtenerMedicosHorarios() {
+        $stmt = $this->pdo->prepare(
+            "SELECT * FROM vista_medicos_horarios"
+        );
+        $stmt->execute();
         return $stmt->fetchAll();
     }
 }
